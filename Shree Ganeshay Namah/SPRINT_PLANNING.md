@@ -561,15 +561,15 @@ Unchanged from v1 except **the rider network moves out of "explicitly deferred" 
 - Repo scaffolding for all three deployables (`proximity_app`, `proximity_web`, `proximity_backend`), empty Edge Function deployed as a smoke test.
 
 ### Sprint 1 (2 weeks) — Identity, roles, geo core
-- Migrations: `users`, `shop_team_members`, `addresses` (w/ PostGIS `location`), `categories` (seeded).
-- `custom_access_token_hook` for `role` claim.
-- RLS baseline policies per §5.2 on every table created so far.
+- **Migrations already drafted and committed** (`migrations/000`–`004`): `postgis`/`pg_cron`/`pg_net` extensions, `users`, `addresses` (w/ PostGIS `location`), `categories` (seeded, 20-item list), `custom_access_token_hook` + `get_role()` helper.
+- `shop_team_members` **moved to Sprint 2** — it references `shops(id)`, which doesn't exist until then; listing it here in the original draft was a sequencing bug, caught while actually writing the SQL rather than left for a migration-time failure.
+- RLS baseline policies per §5.2 on every table created so far (drafted alongside each migration above, not a separate pass).
 - Auth in `proximity_app`: Email OTP, Google Sign-In, **Apple Sign-In** (§1.1).
-- First end-to-end RPC built (`rpc_add_to_cart` is a good minimal proof) to validate the SECURITY DEFINER + RLS pattern before it's relied on everywhere else.
+- First end-to-end RPC built to prove the SECURITY DEFINER + RLS pattern before it's relied on everywhere else — **`rpc_set_default_address`** (unset the buyer's current default, set the new one, atomically) is the right minimal case here, not `rpc_add_to_cart` as originally drafted: carts/variants don't exist until Sprint 3/6, but addresses do, and "exactly one default" is a real enough cross-row invariant to prove the pattern on.
 - **Exit criteria:** a real user can sign up on both platforms, has a role, has an address with a resolved lat/lng.
 
 ### Sprint 2 (2 weeks) — Shop & rider onboarding, platform settings
-- Migrations: `shops`, `shop_business_hours`, `shop_media`, `shop_sub_categories`, `riders`, `platform_settings` (seeded with delivery fee + slot window + default commission), `shop_blackout_dates`.
+- Migrations: `shops`, `shop_team_members` (moved here from Sprint 1, see above), `shop_business_hours`, `shop_media`, `shop_sub_categories`, `riders`, `platform_settings` (seeded with delivery fee + slot window + default commission), `shop_blackout_dates`.
 - `proximity_web` scaffolded (Next.js 16/Tailwind/shadcn), shopkeeper signup → shop creation form (incl. `delivery_mode` choice) → `pending` status.
 - Rider signup + KYC upload flow (mobile, minimal) → `is_verified=false`.
 - Admin panel skeleton: shop approval queue, rider approval queue.
