@@ -31,6 +31,16 @@ export async function isShopOwner(userId: string, shopId: string): Promise<boole
   return (await getShopMembership(userId, shopId)) === "owner";
 }
 
+// §5.3's "Add/edit catalog" row -- owner AND staff can write the catalog
+// (sub-categories, products, variants, images); only `delivery` is excluded.
+// Sprint 3's first consumer (routes/catalog.ts); pulled out here rather than
+// re-inlining the same ["owner","staff"].includes(...) check in every
+// catalog route, same reasoning this file's header gives for existing once.
+export async function isShopWriter(userId: string, shopId: string): Promise<boolean> {
+  const role = await getShopMembership(userId, shopId);
+  return role === "owner" || role === "staff";
+}
+
 export async function shopIdsForUser(userId: string): Promise<string[]> {
   const rows = await db.select({ shopId: shopTeamMembers.shopId }).from(shopTeamMembers).where(eq(shopTeamMembers.userId, userId));
   return rows.map((r) => r.shopId);

@@ -54,6 +54,70 @@ export type BusinessHour = {
   isClosed: boolean;
 };
 
+// Sprint 3 (routes/catalog.ts). Category is Sprint 1's global list
+// (categories.ts); the rest mirror schema.ts's Sprint 3 additions.
+export type Category = {
+  id: string;
+  name: string;
+  icon: string | null;
+  imageUrl: string | null;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+export type ShopSubCategory = {
+  id: string;
+  shopId: string;
+  categoryId: string;
+  name: string;
+  iconUrl: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string;
+};
+
+export type StockStatus = "in_stock" | "low_stock" | "out_of_stock";
+
+// unitValue/price/mrp come back as their Drizzle-default shapes: numeric ->
+// string, integer -> number (same numeric-as-string note types.ts already
+// makes for Shop's serviceRadiusKm/platformCommissionPct).
+export type ProductVariant = {
+  id: string;
+  productId: string;
+  unitValue: string;
+  unitLabel: string;
+  sku: string | null;
+  price: number;
+  mrp: number | null;
+  stockQty: number;
+  stockStatus: StockStatus;
+  isActive: boolean;
+  sortOrder: number;
+};
+
+export type ProductImage = {
+  id: string;
+  productId: string;
+  imageUrl: string;
+  sortOrder: number;
+};
+
+export type Product = {
+  id: string;
+  shopId: string;
+  categoryId: string;
+  subCategoryId: string | null;
+  name: string;
+  description: string | null;
+  isVeg: boolean | null;
+  infoMessage: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  variants: ProductVariant[];
+  images?: ProductImage[];
+};
+
 export type VehicleType = "bike" | "scooter" | "bicycle" | "on_foot";
 export type RiderStatus = "offline" | "available" | "on_delivery";
 
