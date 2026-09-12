@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../features/auth/presentation/auth_provider.dart';
+import '../../features/home/presentation/providers/home_providers.dart';
 
 /// Global bottom-nav shell -- SPRINT_PLANNING.md §6.1/§7.1: four tabs (Home,
 /// Categories, Cart, Order Again), no fifth loyalty tab like Baker Ally had,
@@ -42,35 +43,65 @@ class AppShell extends ConsumerWidget {
   }
 }
 
-/// Search (left/expanded) + avatar (right) -- no address label yet (that's
-/// Sprint 4, once there's a "shops near you" query that actually uses it)
-/// and no cart icon, per the file header. Avatar routes to /login when
-/// signed out, matching the real auth state now wired up in Sprint 1.
+/// Address (left/expanded) + search + avatar (right) -- SPRINT_PLANNING.md
+/// §7.1, wired for real in Sprint 4 (the placeholder search box Sprint 1
+/// shipped here deliberately said "no address label yet, that's Sprint 4" --
+/// this is that). The address reads [buyerLocationProvider] (Home's own
+/// "which lat/lng is Shops-near-you using" provider, shared here so the top
+/// bar and Home's query never disagree about the buyer's location) and taps
+/// through to the address list to change it. No cart icon, per the file
+/// header. Avatar routes to /login when signed out, matching the real auth
+/// state wired up in Sprint 1.
 class _TopBar extends ConsumerWidget {
   const _TopBar();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isLoggedIn = ref.watch(authProvider.select((s) => s.isLoggedIn));
+    final locationAsync = ref.watch(buyerLocationProvider);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
           Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.line)),
-              child: Row(
-                children: [
-                  const Icon(Icons.search, size: 18, color: AppColors.inkSoft),
-                  const SizedBox(width: 8),
-                  Text('Search shops, items...', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.inkSoft)),
-                ],
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => context.push('/addresses'),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.location_on_outlined, size: 20, color: AppColors.brand),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        locationAsync.when(
+                          data: (location) => location?.label ?? 'Set your location',
+                          loading: () => 'Locating…',
+                          error: (error, stackTrace) => 'Set your location',
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    const Icon(Icons.keyboard_arrow_down, size: 18, color: AppColors.inkSoft),
+                  ],
+                ),
               ),
             ),
           ),
-          const SizedBox(width: 10),
+          // Search UX/backend isn't in Sprint 4's scope (§11's entry names
+          // shops-near-you + category filtering + the slot badge, not
+          // search) -- the icon stays in place per §7.1's layout, wired to
+          // an honest "not built yet" rather than a dead tap.
+          IconButton(
+            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Search -- coming soon')),
+            ),
+            icon: const Icon(Icons.search, color: AppColors.ink),
+          ),
           IconButton(
             onPressed: () {
               if (!isLoggedIn) {
