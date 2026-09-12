@@ -4,29 +4,35 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../features/auth/presentation/auth_provider.dart';
+import '../../features/cart/presentation/providers/cart_providers.dart';
 import '../../features/home/presentation/providers/home_providers.dart';
 
 /// Global bottom-nav shell -- SPRINT_PLANNING.md §6.1/§7.1: four tabs (Home,
 /// Categories, Cart, Order Again), no fifth loyalty tab like Baker Ally had,
 /// and deliberately no cart icon in the top bar -- cart lives on the bottom
 /// tab only, per the very first requirement in this whole project. Cart's
-/// badge count wiring waits for Sprint 6 (cart exists then); the tab itself
-/// exists now so the router/shell shape is fully proven in Sprint 1 rather
-/// than retrofitted later.
+/// badge count wiring waited for Sprint 6 (cart exists now); the tab itself
+/// existed since Sprint 1 so the router/shell shape was fully proven before
+/// being retrofitted here.
 class AppShell extends ConsumerWidget {
   const AppShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
-  static const _destinations = [
-    NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-    NavigationDestination(icon: Icon(Icons.grid_view_outlined), selectedIcon: Icon(Icons.grid_view), label: 'Categories'),
-    NavigationDestination(icon: Icon(Icons.shopping_cart_outlined), selectedIcon: Icon(Icons.shopping_cart), label: 'Cart'),
-    NavigationDestination(icon: Icon(Icons.replay_outlined), selectedIcon: Icon(Icons.replay), label: 'Order Again'),
-  ];
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final cartCount = ref.watch(cartItemCountProvider);
+    final destinations = [
+      const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
+      const NavigationDestination(icon: Icon(Icons.grid_view_outlined), selectedIcon: Icon(Icons.grid_view), label: 'Categories'),
+      NavigationDestination(
+        icon: _CartIcon(count: cartCount, filled: false),
+        selectedIcon: _CartIcon(count: cartCount, filled: true),
+        label: 'Cart',
+      ),
+      const NavigationDestination(icon: Icon(Icons.replay_outlined), selectedIcon: Icon(Icons.replay), label: 'Order Again'),
+    ];
+
     return Scaffold(
       body: Column(
         children: [
@@ -37,8 +43,26 @@ class AppShell extends ConsumerWidget {
       bottomNavigationBar: NavigationBar(
         selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: (index) => navigationShell.goBranch(index, initialLocation: index == navigationShell.currentIndex),
-        destinations: _destinations,
+        destinations: destinations,
       ),
+    );
+  }
+}
+
+class _CartIcon extends StatelessWidget {
+  const _CartIcon({required this.count, required this.filled});
+
+  final int count;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = Icon(filled ? Icons.shopping_cart : Icons.shopping_cart_outlined);
+    if (count <= 0) return icon;
+    return Badge(
+      label: Text(count > 99 ? '99+' : '$count'),
+      backgroundColor: AppColors.urgent,
+      child: icon,
     );
   }
 }
