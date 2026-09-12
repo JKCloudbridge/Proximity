@@ -1,15 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/utils/currency.dart';
+import '../../../payments/presentation/attempt_online_payment.dart';
+import '../../../payments/presentation/providers/payment_providers.dart';
 import '../../data/models/order_group.dart';
 import '../providers/checkout_providers.dart';
 
 final orderGroupProvider = FutureProvider.autoDispose.family<OrderGroup?, String>((ref, id) {
   return ref.watch(checkoutRepositoryProvider).getOrderGroup(id);
 });
+
+/// Sprint 8: `group.paymentStatus` now carries real meaning (rpc_confirm_payment,
+/// migrations/036) instead of Sprint 7's placeholder inference. One place to
+/// turn it into what the buyer sees, rather than re-deriving it per widget.
+String _paymentStatusLabel(OrderGroup group) {
+  switch (group.paymentStatus) {
+    case 'paid':
+      return 'Paid';
+    case 'collected_at_shop':
+      return 'Pay at shop';
+    case 'failed':
+      return 'Payment failed';
+    case 'pending':
+    default:
+      return group.isPayAtShop ? 'Confirming...' : 'Payment pending';
+  }
+}
 
 /// SPRINT_PLANNING.md §7.4 step 5: "one card per shop-group, each showing
 /// its own fulfillment type, slot, and (if applicable) delivery-fee line --
@@ -37,7 +57,9 @@ class OrderConfirmationScreen extends ConsumerWidget {
         ],
       ),
       body: groupAsync.when(
-        data: (group) => group == null ? const Center(child: Text('Order not found.')) : _Body(group: group),
+        data: (group) => group == null
+            ? const Center(child: Text('Order not found.'))
+            : _Body(orderGroupId: orderGroupId, group: group),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => const Center(child: Text('Could not load this order.')),
       ),
@@ -45,14 +67,36 @@ class OrderConfirmationScreen extends ConsumerWidget {
   }
 }
 
-class _Body extends StatelessWidget {
-  const _Body({required this.group});
+class _Body extends ConsumerStatefulWidget {
+  const _Body({required this.orderGroupId, required this.group});
 
+  final String orderGroupId;
   final OrderGroup group;
 
   @override
+  ConsumerState<_Body> createState() => _BodyState();
+}
+
+class _BodyState extends ConsumerState<_Body> {
+  bool _retrying = false;
+
+  /// Sprint 8: same idempotent create-order/pay/verify sequence
+  /// checkout_screen.dart's own post-placement attempt already runs -- one
+  /// shared implementation (attemptOnlinePayment), two call sites. Re-fetches
+  /// the group afterward regardless of outcome: `paymentStatus` is the one
+  /// honest signal either attempt actually changed anything.
+  Future<void> _retryPayment() async {
+    setState(() => _retrying = true);
+    await attemptOnlinePayment(ref, widget.orderGroupId);
+    ref.invalidate(orderGroupProvider(widget.orderGroupId));
+    if (mounted) setState(() => _retrying = false);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final group = widget.group;
     final textTheme = Theme.of(context).textTheme;
+    final needsPaymentRetry = group.paymentMode == 'online' && group.paymentStatus == 'pending';
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
@@ -78,6 +122,32 @@ class _Body extends StatelessWidget {
             ],
           ),
         ),
+        if (needsPaymentRetry) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: AppColors.urgent.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(14)),
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline, color: AppColors.urgent, size: 20),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    "Payment wasn't completed. Your order is saved -- finish paying to confirm it.",
+                    style: TextStyle(fontSize: 12.5),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: _retrying ? null : _retryPayment,
+                  child: _retrying
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         // One card per `orders` row -- §4.8's "one card per shop-group."
         for (final order in group.orders) _OrderCard(order: order),
@@ -88,13 +158,27 @@ class _Body extends StatelessWidget {
   }
 }
 
-class _OrderCard extends StatelessWidget {
+class _OrderCard extends ConsumerWidget {
   const _OrderCard({required this.order});
 
   final OrderGroupOrder order;
 
+  Future<void> _viewInvoice(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final invoice = await ref.read(paymentRepositoryProvider).getInvoice(order.id);
+    if (invoice == null) {
+      messenger.showSnackBar(const SnackBar(content: Text("This shop's invoice isn't ready yet -- try again shortly.")));
+      return;
+    }
+    final uri = Uri.parse(invoice.url);
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened) {
+      messenger.showSnackBar(const SnackBar(content: Text('Could not open the invoice.')));
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final textTheme = Theme.of(context).textTheme;
 
     return Container(
@@ -157,6 +241,21 @@ class _OrderCard extends StatelessWidget {
           if (order.discountValue > 0) _amountRow(context, 'Discount', '-${formatPaise(order.discountValue)}'),
           if (order.deliveryFee > 0) _amountRow(context, 'Delivery fee', formatPaise(order.deliveryFee)),
           _amountRow(context, 'This shop', formatPaise(order.total), bold: true),
+          // Sprint 8: an invoice only exists once this shop's own order has
+          // actually been confirmed (rpc_generate_invoice refuses a
+          // 'pending'/'cancelled' order, migrations/037) -- shown only past
+          // that point rather than a button that would just 404 before then.
+          if (order.status != 'pending' && order.status != 'cancelled') ...[
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => _viewInvoice(context, ref),
+                icon: const Icon(Icons.receipt_long_outlined, size: 16),
+                label: const Text('View invoice'),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -244,7 +343,7 @@ class _TotalsCard extends StatelessWidget {
             _row(context, 'Discount${group.discountCode != null ? ' (${group.discountCode})' : ''}', '-${formatPaise(group.discountValue)}'),
           _row(context, 'Delivery', group.deliveryFeeTotal == 0 ? 'Free' : formatPaise(group.deliveryFeeTotal)),
           const Divider(height: 18),
-          _row(context, group.isPayAtShop ? 'Pay at shop' : 'Paid', formatPaise(group.total), bold: true),
+          _row(context, _paymentStatusLabel(group), formatPaise(group.total), bold: true),
           const SizedBox(height: 4),
           Align(
             alignment: Alignment.centerLeft,

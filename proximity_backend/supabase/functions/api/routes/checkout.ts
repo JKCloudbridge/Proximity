@@ -1,21 +1,11 @@
 import { Hono } from "npm:hono";
 import { zValidator } from "npm:@hono/zod-validator";
 import { z } from "npm:zod";
-import { and, asc, eq, inArray, sql } from "npm:drizzle-orm";
+import { and, eq, sql } from "npm:drizzle-orm";
 
 import { authMiddleware, type AuthEnv } from "../middleware/auth.ts";
 import { db } from "../lib/db.ts";
-import {
-  addresses,
-  discounts,
-  orderGroups,
-  orderItems,
-  orders,
-  platformSettings,
-  shopBlackoutDates,
-  shopBusinessHours,
-  shops,
-} from "../db/schema.ts";
+import { discounts, platformSettings, shopBlackoutDates, shopBusinessHours, shops } from "../db/schema.ts";
 import {
   DEFAULT_SLOT_WINDOW,
   generateSlots,
@@ -23,6 +13,7 @@ import {
   istWeekdayForDate,
   type SlotWindow,
 } from "../lib/slots.ts";
+import { confirmPaymentAndGenerateInvoices, loadOrderGroup } from "../lib/orderConfirmation.ts";
 
 // Sprint 7 (§7.4's checkout flow, §4.6's slot endpoint, §5.4's
 // rpc_place_order). Everything that actually *writes* an order goes through
@@ -279,6 +270,26 @@ checkoutRoute.post("/orders", zValidator("json", placeOrderSchema), async (c) =>
     throw err;
   }
 
+  // Sprint 8: pay_at_shop has no gateway event to wait for at all (§1.4) --
+  // migrations/036's own header records the decision in full: this is the
+  // one and only trigger point for a pay_at_shop group, chosen specifically
+  // because no shop-side order-status-advance surface exists anywhere in
+  // this codebase yet to gate on instead. `online` groups are deliberately
+  // left at 'pending' here -- routes/payments.ts's verify-payment/webhook
+  // handlers are what confirm those, once a real gateway payment exists.
+  if (body.paymentMode === "pay_at_shop") {
+    try {
+      await confirmPaymentAndGenerateInvoices({ groupId });
+    } catch (err) {
+      // The order itself was placed successfully (rpc_place_order already
+      // committed) -- a failure here shouldn't read as "checkout failed" to
+      // the buyer. Logged, not thrown; the confirmation screen shows
+      // whatever payment_status actually landed as, which is honest either
+      // way.
+      console.error(`confirmPaymentAndGenerateInvoices failed for pay_at_shop group ${groupId}`, err);
+    }
+  }
+
   const data = await loadOrderGroup(groupId, authUser.id);
   return c.json({ data }, 201);
 });
@@ -288,82 +299,9 @@ checkoutRoute.post("/orders", zValidator("json", placeOrderSchema), async (c) =>
 // each showing its own fulfillment type, slot, and delivery-fee line --
 // never a single merged summary"). The full order *history* list is still
 // Sprint 10's job (§11); this is the single-group read the checkout flow
-// itself needs to land on.
+// itself needs to land on. Moved to lib/orderConfirmation.ts in Sprint 8 --
+// see that file's header for why (routes/payments.ts needs it too).
 // ---------------------------------------------------------------------------
-
-async function loadOrderGroup(groupId: string, userId: string) {
-  const [group] = await db
-    .select()
-    .from(orderGroups)
-    .where(and(eq(orderGroups.id, groupId), eq(orderGroups.userId, userId)))
-    .limit(1);
-  if (!group) return null;
-
-  const orderRows = await db
-    .select()
-    .from(orders)
-    .where(eq(orders.orderGroupId, groupId))
-    .orderBy(asc(orders.createdAt));
-
-  const orderIds = orderRows.map((o) => o.id);
-  const itemRows = orderIds.length
-    ? await db.select().from(orderItems).where(inArray(orderItems.orderId, orderIds))
-    : [];
-
-  const shopIds = [...new Set(orderRows.map((o) => o.shopId))];
-  const shopRows = shopIds.length
-    ? await db.select({ id: shops.id, name: shops.name, logoUrl: shops.logoUrl, addressLine: shops.addressLine }).from(shops).where(inArray(shops.id, shopIds))
-    : [];
-  const shopById = new Map(shopRows.map((s) => [s.id, s]));
-
-  const addressIds = [...new Set(orderRows.map((o) => o.addressId).filter((id): id is string => id !== null))];
-  const addressRows = addressIds.length
-    ? await db.select().from(addresses).where(inArray(addresses.id, addressIds))
-    : [];
-  const addressById = new Map(addressRows.map((a) => [a.id, a]));
-
-  const [discount] = group.discountId
-    ? await db.select({ code: discounts.code, name: discounts.name }).from(discounts).where(eq(discounts.id, group.discountId)).limit(1)
-    : [undefined];
-
-  return {
-    id: group.id,
-    paymentMode: group.paymentMode,
-    paymentStatus: group.paymentStatus,
-    subtotal: group.subtotal,
-    discountValue: group.discountValue,
-    deliveryFeeTotal: group.deliveryFeeTotal,
-    total: group.total,
-    createdAt: group.createdAt,
-    discount: discount ? { code: discount.code, name: discount.name } : null,
-    orders: orderRows.map((o) => {
-      const address = o.addressId ? addressById.get(o.addressId) : undefined;
-      return {
-        id: o.id,
-        shop: shopById.get(o.shopId) ?? null,
-        fulfillmentType: o.fulfillmentType,
-        deliveryFulfilledBy: o.deliveryFulfilledBy,
-        slotStart: o.slotStart,
-        slotEnd: o.slotEnd,
-        status: o.status,
-        subtotal: o.subtotal,
-        discountValue: o.discountValue,
-        deliveryFee: o.deliveryFee,
-        total: o.total,
-        address: address ? { id: address.id, label: address.label, line1: address.line1, city: address.city } : null,
-        items: itemRows
-          .filter((i) => i.orderId === o.id)
-          .map((i) => ({
-            id: i.id,
-            productName: i.productName,
-            variantName: i.variantName,
-            quantity: i.quantity,
-            unitPrice: i.unitPrice,
-          })),
-      };
-    }),
-  };
-}
 
 checkoutRoute.get("/order-groups/:id", async (c) => {
   const authUser = c.get("user");

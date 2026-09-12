@@ -87,6 +87,12 @@ export const shops = pgTable("shops", {
   minOrderValue: integer("min_order_value").notNull().default(0),
   status: text("status").notNull().default("pending"),
   platformCommissionPct: numeric("platform_commission_pct", { precision: 4, scale: 2 }).notNull().default("10.00"),
+  // Sprint 8 (migrations/033) -- rpc_generate_invoice's per-shop invoice
+  // counter. See that migration's header for why it's a plain column, not a
+  // SQL SEQUENCE. Never written through Drizzle directly (only the RPC's own
+  // atomic UPDATE ... RETURNING touches it) -- present here so routes that
+  // read a shop row get a complete, accurate type back.
+  nextInvoiceSeq: integer("next_invoice_seq").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -473,4 +479,38 @@ export const productCrossSell = pgTable(
       table.recommendedProductId,
     ),
   ],
+);
+
+// Sprint 8 (migrations/034) -- see that file's header for why this is a
+// fresh design with no recoverable original (unlike carts/product_cross_sell/
+// discounts, Baker Ally has no invoices migration either). Written only by
+// rpc_generate_invoice (037); `shopName`/`shopGstin` are snapshots at
+// generation time, never joined live from `shops` -- same immutable-record
+// principle as orderItems' product_name/variant_name/unit_price.
+export const invoices = pgTable(
+  "invoices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id")
+      .notNull()
+      .unique()
+      .references(() => orders.id),
+    shopId: uuid("shop_id")
+      .notNull()
+      .references(() => shops.id),
+    invoiceNumber: text("invoice_number").notNull(),
+    shopName: text("shop_name").notNull(),
+    shopGstin: text("shop_gstin"),
+    subtotal: integer("subtotal").notNull(),
+    discountValue: integer("discount_value").notNull().default(0),
+    deliveryFee: integer("delivery_fee").notNull().default(0),
+    total: integer("total").notNull(),
+    // Object path inside the private `invoices` bucket (035) --
+    // `{shopId}/{orderId}.pdf` -- NOT a public URL. routes/invoices.ts mints
+    // a short-lived signed URL from this on every read; nothing caches or
+    // exposes the path itself to a client response.
+    pdfPath: text("pdf_path").notNull(),
+    generatedAt: timestamp("generated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("invoices_shop_id_invoice_number_key").on(table.shopId, table.invoiceNumber)],
 );

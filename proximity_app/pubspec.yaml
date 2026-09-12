@@ -49,6 +49,17 @@ dependencies:
   flutter_form_builder: ^10.3.0+2
   form_builder_validators: ^11.3.0
   image_picker: ^1.2.3
+  # Sprint 8 -- verified live against pub.dev before adding (this project's
+  # standing rule for third-party packages): razorpay_flutter 1.4.6 is
+  # current, published by the verified Razorpay publisher, and wraps the
+  # native Android/iOS SDKs behind one Razorpay()/open()/on() surface (see
+  # lib/features/payments/data/razorpay_payment_gateway.dart's header for
+  # exactly which API was checked).
+  razorpay_flutter: ^1.4.6
+  # Sprint 8 -- opens a generated invoice's signed PDF URL in the device's
+  # own PDF viewer/browser rather than this app rendering PDFs itself.
+  # 6.3.2 verified live against pub.dev before adding.
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:
