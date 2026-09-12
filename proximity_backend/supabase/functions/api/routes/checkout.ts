@@ -1,11 +1,11 @@
 import { Hono } from "npm:hono";
 import { zValidator } from "npm:@hono/zod-validator";
 import { z } from "npm:zod";
-import { and, eq, sql } from "npm:drizzle-orm";
+import { and, desc, eq, inArray, sql } from "npm:drizzle-orm";
 
 import { authMiddleware, type AuthEnv } from "../middleware/auth.ts";
 import { db } from "../lib/db.ts";
-import { discounts, platformSettings, shopBlackoutDates, shopBusinessHours, shops } from "../db/schema.ts";
+import { discounts, orderGroups, orders, platformSettings, shopBlackoutDates, shopBusinessHours, shops } from "../db/schema.ts";
 import {
   DEFAULT_SLOT_WINDOW,
   generateSlots,
@@ -37,6 +37,12 @@ export const checkoutRoute = new Hono<AuthEnv>();
 checkoutRoute.use("/checkout/*", authMiddleware);
 checkoutRoute.use("/orders", authMiddleware);
 checkoutRoute.use("/orders/*", authMiddleware);
+// Sprint 9's new GET /order-groups (list, no trailing segment) needs its
+// own exact-path registration alongside the existing /order-groups/*
+// wildcard -- same "a bare `/*` doesn't match the collection route itself"
+// gap this file's own /orders + /orders/* pair already existed to close
+// (Sprint 7), not a new discovery this sprint made independently.
+checkoutRoute.use("/order-groups", authMiddleware);
 checkoutRoute.use("/order-groups/*", authMiddleware);
 checkoutRoute.use("/discounts/*", authMiddleware);
 
@@ -292,6 +298,73 @@ checkoutRoute.post("/orders", zValidator("json", placeOrderSchema), async (c) =>
 
   const data = await loadOrderGroup(groupId, authUser.id);
   return c.json({ data }, 201);
+});
+
+// ---------------------------------------------------------------------------
+// Confirmation / order-group read (§7.4 step 5: "one card per shop-group,
+// each showing its own fulfillment type, slot, and delivery-fee line --
+// never a single merged summary"). The full order *history* list is still
+// Sprint 10's job (§11); this is the single-group read the checkout flow
+// itself needs to land on. Moved to lib/orderConfirmation.ts in Sprint 8 --
+// see that file's header for why (routes/payments.ts needs it too).
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Sprint 9 -- a minimal list, deliberately NOT §11's own Sprint 10 "Order
+// history / Order Again" feature (that's reorder, filtering, pagination
+// against real usage patterns -- none of that is this sprint's job). This
+// exists for one narrow, load-bearing reason: §7.5's new live-tracking view
+// (the confirmation screen, now Realtime-driven) was, through Sprint 7/8,
+// reachable ONLY as a one-time push straight off a just-completed checkout
+// -- nothing in the app could navigate back to an order placed earlier and
+// then backgrounded/closed. A tracking feature nothing can reach isn't
+// really shipped. So: one flat, unfiltered, most-recent-first list of the
+// buyer's own order_groups (own-user data, §5.2), summarized (NOT
+// loadOrderGroup's full per-item nesting -- this is a list to tap through
+// from, not a detail view) -- tapping a row still lands on the exact same
+// GET /order-groups/:id + Realtime subscription this sprint already built.
+// Real Order History (Sprint 10) can replace or extend this without
+// touching the tracking screen it feeds at all. Registered BEFORE
+// /order-groups/:id, same defensive-but-not-load-bearing ordering
+// shops.ts's own /shops/near-before-/shops/:id comment established in
+// Sprint 5 (Hono's router resolves a static segment over a param one
+// regardless of registration order -- this costs nothing and removes the
+// question for a future reader).
+// ---------------------------------------------------------------------------
+
+checkoutRoute.get("/order-groups", async (c) => {
+  const authUser = c.get("user");
+
+  const groups = await db
+    .select({
+      id: orderGroups.id,
+      paymentMode: orderGroups.paymentMode,
+      paymentStatus: orderGroups.paymentStatus,
+      total: orderGroups.total,
+      createdAt: orderGroups.createdAt,
+    })
+    .from(orderGroups)
+    .where(eq(orderGroups.userId, authUser.id))
+    .orderBy(desc(orderGroups.createdAt))
+    .limit(50);
+
+  const groupIds = groups.map((g) => g.id);
+  const shopStatusRows = groupIds.length
+    ? await db
+        .select({ orderGroupId: orders.orderGroupId, shopId: orders.shopId, status: orders.status, shopName: shops.name })
+        .from(orders)
+        .innerJoin(shops, eq(shops.id, orders.shopId))
+        .where(inArray(orders.orderGroupId, groupIds))
+    : [];
+
+  return c.json({
+    data: groups.map((g) => ({
+      ...g,
+      shops: shopStatusRows
+        .filter((r) => r.orderGroupId === g.id)
+        .map((r) => ({ shopId: r.shopId, shopName: r.shopName, status: r.status })),
+    })),
+  });
 });
 
 // ---------------------------------------------------------------------------

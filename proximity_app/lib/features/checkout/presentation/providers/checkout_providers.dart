@@ -8,9 +8,18 @@ import '../../../../core/providers.dart';
 import '../../data/checkout_repository.dart';
 import '../../data/models/checkout_config.dart';
 import '../../data/models/fulfillment_slot.dart';
+import '../../data/models/order_group_summary.dart';
 
 final checkoutRepositoryProvider = Provider<CheckoutRepository>((ref) {
   return CheckoutRepository(dio: ref.watch(dioProvider));
+});
+
+/// Sprint 9 -- backs MyOrdersScreen (see that file and GET /v1/order-groups'
+/// own header for scope). `.autoDispose`: only interesting while that screen
+/// is open, re-fetched with a fresh `ref.invalidate` on pull-to-refresh
+/// rather than kept warm in the background.
+final myOrderGroupsProvider = FutureProvider.autoDispose<List<OrderGroupSummary>>((ref) {
+  return ref.watch(checkoutRepositoryProvider).getOrderGroups();
 });
 
 /// The admin-controlled delivery fee + slot granularity (§4.6/§1.3). Not
