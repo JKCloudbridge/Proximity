@@ -67,7 +67,15 @@ class _ShopCartSectionState extends ConsumerState<ShopCartSection> {
           ),
           if (_expanded) ...[
             const Divider(height: 1, color: AppColors.line),
-            for (final item in widget.items) ...[CartItemTile(item: item), const Divider(height: 1, indent: 16, color: AppColors.line)],
+            // Keyed by item id, not list position -- CartItemTile is a
+            // StatefulWidget (its own in-flight `_busy` flag), and this list
+            // shrinks whenever an item is removed. Without an explicit key,
+            // Flutter reconciles by position and can hand a removed item's
+            // leftover state to whatever row shifts into its old slot.
+            for (final item in widget.items) ...[
+              CartItemTile(key: ValueKey(item.id), item: item),
+              const Divider(height: 1, indent: 16, color: AppColors.line),
+            ],
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(

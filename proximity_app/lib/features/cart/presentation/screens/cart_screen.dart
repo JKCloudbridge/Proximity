@@ -70,7 +70,15 @@ class _CartBody extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
             children: [
-              for (final entry in byShop.entries) ShopCartSection(shop: entry.value.first.shop, items: entry.value),
+              // Keyed by shop id -- ShopCartSection is a StatefulWidget (its
+              // own collapse/expand flag), and this list shrinks whenever a
+              // shop's last item is removed ("Remove all from this shop," or
+              // the last item in it going to 0). Without an explicit key,
+              // Flutter reconciles by position and a shop the buyer manually
+              // collapsed could end up handing that collapsed state to a
+              // completely different shop that shifts into its old slot.
+              for (final entry in byShop.entries)
+                ShopCartSection(key: ValueKey(entry.key), shop: entry.value.first.shop, items: entry.value),
             ],
           ),
         ),
