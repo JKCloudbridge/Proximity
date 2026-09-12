@@ -9,6 +9,7 @@ import '../../../addresses/data/models/address.dart';
 import '../../../addresses/presentation/providers/address_providers.dart';
 import '../../../cart/data/models/cart_item.dart';
 import '../../../cart/presentation/providers/cart_providers.dart';
+import '../../../payments/presentation/attempt_online_payment.dart';
 import '../providers/checkout_providers.dart';
 import '../widgets/shop_fulfillment_card.dart';
 
@@ -120,6 +121,23 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       // draft so a later checkout doesn't inherit stale selections.
       ref.invalidate(cartProvider);
       ref.read(checkoutDraftProvider.notifier).reset();
+
+      // Sprint 8: the order exists (rpc_place_order already committed) but,
+      // for an online group, is still unpaid at this point -- §4.8's own
+      // separation of placement from payment (Sprint 7.md's "the
+      // stubbed-payment boundary" note) is exactly what makes this a safe
+      // place to attempt Checkout: nothing about the order itself depends on
+      // payment succeeding right now. Deliberately not awaited-into-a-
+      // blocking-failure: whether this succeeds, fails, or the buyer
+      // cancels the Checkout sheet, the confirmation screen is still the
+      // right destination -- it shows the group's real payment_status and,
+      // if still pending, its own "Complete payment" retry (same group id,
+      // same idempotent flow), rather than this screen needing a second
+      // failure-handling path of its own.
+      if (group.paymentMode == 'online' && group.paymentStatus == 'pending') {
+        await attemptOnlinePayment(ref, group.id);
+      }
+
       if (!mounted) return;
       context.pushReplacement('/order-groups/${group.id}');
     } on DioException catch (err) {

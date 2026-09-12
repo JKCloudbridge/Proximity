@@ -1,0 +1,43 @@
+-- Sprint 8: the `invoices` Storage bucket -- named in SPRINT_PLANNING.md
+-- §3.6 ("private") since Sprint 0, created now because this is the first
+-- sprint that generates a PDF to put in it.
+--
+-- Deliberately different from every other bucket this project has created
+-- (`rider-documents` 016, `product-images` 020): **no client-facing Storage
+-- RLS read policy at all.** Both those buckets let the owning party read
+-- their own object directly through Supabase's Storage API with their own
+-- JWT (a live RLS enforcement path, per that migration's own header) --
+-- `rider-documents`' path is `{user_id}/...` and `product-images`' is
+-- `{shop_id}/...`, so "does this JWT's uid/shop-membership match the folder"
+-- is a clean, single-condition policy either way.
+--
+-- Invoices have TWO independent ownership classes that both need to read the
+-- same object (the buyer who placed the order, AND that shop's own
+-- owner/staff team, per invoices' own RLS in migrations/034) -- and the
+-- bucket's path convention (`{shop_id}/{order_id}.pdf`, chosen so
+-- rpc_generate_invoice, 037, can compute it deterministically with no round
+-- trip) only has the shop_id segment available to a Storage policy, not the
+-- buyer's user_id. A correct multi-condition policy is possible (an EXISTS
+-- subquery against `orders` keyed off the second path segment), but adds a
+-- second, subtly-different-in-shape access-control implementation for
+-- exactly one bucket in a project whose stated trust boundary is already
+-- "the Edge Function checks ownership, everything else is a backstop"
+-- (§5.1). Simpler and more consistent: no bucket-level read policy at all,
+-- and every read goes through the authenticated `GET /v1/orders/:orderId/
+-- invoice` route (routes/invoices.ts), which already has to check exactly
+-- this two-class ownership question for the DB row anyway, then hands back a
+-- short-lived signed URL via the service-role client. The bucket stays
+-- private and unreadable by any anon/authenticated Storage request, full
+-- stop -- a signed URL is the only way in, and it's minted by code that has
+-- already verified who's asking.
+--
+-- Writes are service-role-only too (no INSERT/UPDATE/DELETE policy at all):
+-- only the Edge Function generates and uploads an invoice PDF
+-- (lib/invoice.ts), using the service-role client that bypasses Storage RLS
+-- entirely -- same "server-only bucket" shape this project hasn't needed
+-- until now (every prior bucket had a real client-side uploader: the rider
+-- themself, or a shop-team member's browser).
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('invoices', 'invoices', false)
+ON CONFLICT (id) DO NOTHING;

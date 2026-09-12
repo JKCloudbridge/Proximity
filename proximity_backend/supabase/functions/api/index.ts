@@ -13,6 +13,8 @@ import { wishlistRoute } from "./routes/wishlist.ts";
 import { cartRoute } from "./routes/cart.ts";
 import { recommendationsRoute } from "./routes/recommendations.ts";
 import { checkoutRoute } from "./routes/checkout.ts";
+import { paymentsRoute, paymentsWebhookRoute } from "./routes/payments.ts";
+import { invoicesRoute } from "./routes/invoices.ts";
 
 // Deployed as one Edge Function (`supabase functions deploy api`), reachable
 // at https://<ref>.supabase.co/functions/v1/api/v1/... -- same shape as
@@ -44,6 +46,15 @@ app.route("/v1", wishlistRoute);
 app.route("/v1", cartRoute);
 app.route("/v1", recommendationsRoute);
 app.route("/v1", checkoutRoute);
+app.route("/v1", paymentsRoute);
+app.route("/v1", invoicesRoute);
+// Not under authMiddleware, not CORS-restricted -- Razorpay's own server
+// calls this directly (server-to-server), never a browser or this app's own
+// Flutter client. paymentsRoute (above) still gates its own /order-groups/*
+// paths; this stays a separate export specifically so it's obvious at this
+// call site that it carries no auth middleware, rather than one route file
+// mixing "gated" and "ungated" paths under one easy-to-miss exception.
+app.route("/v1", paymentsWebhookRoute);
 
 app.onError((err, c) => {
   console.error(err);
