@@ -8,6 +8,9 @@ export const ADMIN_NAV_ITEMS: NavItem[] = [
   { href: "/admin/riders", label: "Rider approvals" },
 ];
 
-// Catalog/orders/sales/team all land in Sprint 3+ (§8.2-§8.4) -- this
-// sprint's dashboard only has a shop-status overview.
-export const DASHBOARD_NAV_ITEMS: NavItem[] = [{ href: "/dashboard", label: "Overview" }];
+// Catalog lands this sprint (§8.2); orders/sales/team are still Sprint 7+/12
+// (§8.3-§8.4).
+export const DASHBOARD_NAV_ITEMS: NavItem[] = [
+  { href: "/dashboard", label: "Overview" },
+  { href: "/dashboard/catalog", label: "Catalog" },
+];

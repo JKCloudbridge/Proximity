@@ -1,15 +1,15 @@
 import { boolean, index, integer, jsonb, numeric, pgTable, smallint, text, time, timestamp, unique, uuid } from "npm:drizzle-orm/pg-core";
 
-// Mirrors migrations/001-015 -- see those files for constraints/comments
+// Mirrors migrations/001-020 -- see those files for constraints/comments
 // this schema doesn't repeat (RLS policies, CHECK constraints, extension
 // setup). Sprint 1 subset was users, addresses, categories. Sprint 2 adds
 // shops, shop_team_members, shop_business_hours, riders, platform_settings.
-// shop_media/shop_sub_categories/shop_blackout_dates exist as migrations
-// but have no route yet (Sprint 2.md), so they're intentionally not added
-// here either -- same "schema.ts grows in step with what a route actually
-// touches" discipline as everything else in this file. products/variants
-// land in Sprint 3. Keep this file growing in step with migrations/, never
-// ahead of it.
+// Sprint 3 adds shop_sub_categories, products, product_variants,
+// product_images -- shop_media/shop_blackout_dates still have no route, so
+// they're intentionally still not added here -- same "schema.ts grows in
+// step with what a route actually touches" discipline as everything else in
+// this file. Keep this file growing in step with migrations/, never ahead
+// of it.
 //
 // Note: `location GEOGRAPHY(Point,4326)` on `addresses` (and now `shops`,
 // `riders.current_location`) has no clean Drizzle pg-core column type -- a
@@ -157,4 +157,87 @@ export const platformSettings = pgTable("platform_settings", {
   value: jsonb("value").notNull(),
   updatedBy: uuid("updated_by").references(() => users.id),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Sprint 3 (migrations/010). Table existed since Sprint 2; this is its
+// first route (routes/catalog.ts).
+export const shopSubCategories = pgTable(
+  "shop_sub_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    shopId: uuid("shop_id")
+      .notNull()
+      .references(() => shops.id, { onDelete: "cascade" }),
+    categoryId: uuid("category_id")
+      .notNull()
+      .references(() => categories.id),
+    name: text("name").notNull(),
+    iconUrl: text("icon_url"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("shop_sub_categories_shop_id_category_id_name_key").on(table.shopId, table.categoryId, table.name)],
+);
+
+// Sprint 3 (migrations/017). `searchVector` intentionally omitted -- same
+// "no clean Drizzle pg-core column type, no route reads/writes it yet"
+// reasoning as `shops.location` (see this file's header comment); it's a
+// STORED generated column maintained entirely by Postgres, never set from
+// application code.
+export const products = pgTable("products", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  shopId: uuid("shop_id")
+    .notNull()
+    .references(() => shops.id, { onDelete: "cascade" }),
+  categoryId: uuid("category_id")
+    .notNull()
+    .references(() => categories.id),
+  subCategoryId: uuid("sub_category_id").references(() => shopSubCategories.id),
+  name: text("name").notNull(),
+  description: text("description"),
+  isVeg: boolean("is_veg"),
+  infoMessage: text("info_message"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Sprint 3 (migrations/018). price/mrp are paise integers (§1.7's
+// paise-integer-money convention); numeric columns (unitValue) come back as
+// strings through Drizzle by default, same note proximity_web's types.ts
+// makes for serviceRadiusKm/platformCommissionPct.
+export const productVariants = pgTable(
+  "product_variants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    unitValue: numeric("unit_value", { precision: 10, scale: 2 }).notNull(),
+    unitLabel: text("unit_label").notNull(),
+    sku: text("sku"),
+    price: integer("price").notNull(),
+    mrp: integer("mrp"),
+    stockQty: integer("stock_qty").notNull().default(0),
+    stockStatus: text("stock_status").notNull().default("in_stock"),
+    isActive: boolean("is_active").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("product_variants_product_id_unit_value_unit_label_key").on(table.productId, table.unitValue, table.unitLabel),
+  ],
+);
+
+// Sprint 3 (migrations/019).
+export const productImages = pgTable("product_images", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  productId: uuid("product_id")
+    .notNull()
+    .references(() => products.id, { onDelete: "cascade" }),
+  imageUrl: text("image_url").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
