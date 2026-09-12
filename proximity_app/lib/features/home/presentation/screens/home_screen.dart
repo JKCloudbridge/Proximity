@@ -81,10 +81,9 @@ class HomeScreen extends ConsumerWidget {
   }
 
   void _openShop(BuildContext context, NearbyShop shop) {
-    // Shop detail is Sprint 5's screen (§8's browse-path exit criteria) --
-    // the card is tappable now so this doesn't need retrofitting later, but
-    // there's nowhere real to send it yet.
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${shop.name} -- shop detail arrives in Sprint 5')));
+    // Shop detail is now real (Sprint 5) -- this was a "coming in Sprint 5"
+    // snackbar through Sprint 4, per that sprint's own write-up.
+    context.push('/shop/${shop.id}');
   }
 }
 

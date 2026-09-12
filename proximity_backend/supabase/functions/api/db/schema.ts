@@ -241,3 +241,22 @@ export const productImages = pgTable("product_images", {
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Sprint 5 (migrations/021) -- see that file's header for why this is a
+// fresh design against §4.10's prose rather than a transcription. Scoped to
+// the product, not one product_variant -- routes/wishlist.ts's own header
+// repeats the reasoning.
+export const wishlists = pgTable(
+  "wishlists",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("wishlists_user_id_product_id_key").on(table.userId, table.productId)],
+);

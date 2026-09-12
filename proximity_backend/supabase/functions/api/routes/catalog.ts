@@ -39,6 +39,19 @@ async function withVariants<T extends { id: string }>(rows: T[]) {
   return rows.map((r) => ({ ...r, variants: variants.filter((v) => v.productId === r.id) }));
 }
 
+// Sprint 5. Deliberately a separate helper from withVariants above rather
+// than folding images into it -- the shop-team dashboard's product list
+// (GET /shop/shops/:shopId/products) doesn't need thumbnails and shares
+// withVariants; only this file's buyer-facing listing (below) needs images
+// too, for the shop-detail product grid (§7.1) to have a thumbnail per
+// tile without a second round trip per product.
+async function withImages<T extends { id: string }>(rows: T[]) {
+  if (rows.length === 0) return rows.map((r) => ({ ...r, images: [] }));
+  const ids = rows.map((r) => r.id);
+  const images = await db.select().from(productImages).where(inArray(productImages.productId, ids)).orderBy(productImages.sortOrder);
+  return rows.map((r) => ({ ...r, images: images.filter((i) => i.productId === r.id) }));
+}
+
 // ---------------------------------------------------------------------------
 // Shop sub-categories -- §4.3's shop-owned half of the taxonomy, §8.2's
 // "browse platform categories, create shop_sub_categories" step. Table
@@ -462,17 +475,36 @@ catalogRoute.delete("/shop/shops/:shopId/products/:productId/images/:id", async 
 // criteria true, not the finished buyer API.
 // ---------------------------------------------------------------------------
 
-catalogRoute.get("/shops/:shopId/products", async (c) => {
+// Sprint 5: optional subCategoryId narrows to one shop-detail rail entry
+// (§7.1's vertical category rail, scoped to that shop's own
+// shop_sub_categories, §4.3) -- omitted entirely shows the shop's full
+// catalog, same "All" convention selectedCategoryIdProvider already
+// established on Home (Sprint 4).
+const shopProductsQuerySchema = z.object({ subCategoryId: z.string().uuid().optional() });
+
+catalogRoute.get("/shops/:shopId/products", zValidator("query", shopProductsQuerySchema), async (c) => {
   const shopId = c.req.param("shopId");
+  const { subCategoryId } = c.req.valid("query");
 
   const [shop] = await db.select({ id: shops.id }).from(shops).where(and(eq(shops.id, shopId), eq(shops.status, "approved"))).limit(1);
   if (!shop) return c.json({ error: { code: "SHOP_NOT_FOUND", message: "Shop not found" } }, 404);
 
-  const rows = await db.select().from(products).where(and(eq(products.shopId, shopId), eq(products.isActive, true))).orderBy(products.createdAt);
+  const rows = await db
+    .select()
+    .from(products)
+    .where(
+      and(
+        eq(products.shopId, shopId),
+        eq(products.isActive, true),
+        subCategoryId ? eq(products.subCategoryId, subCategoryId) : undefined,
+      ),
+    )
+    .orderBy(products.createdAt);
   const withAllVariants = await withVariants(rows);
+  const withAllImages = await withImages(withAllVariants);
   // Public listing only ever shows active variants -- an inactive
   // (discontinued) one shouldn't appear even nested under a visible product.
-  const data = withAllVariants.map((p) => ({ ...p, variants: p.variants.filter((v) => v.isActive) }));
+  const data = withAllImages.map((p) => ({ ...p, variants: p.variants.filter((v) => v.isActive) }));
   return c.json({ data });
 });
 
@@ -482,7 +514,16 @@ catalogRoute.get("/products/:id", async (c) => {
   const [product] = await db.select().from(products).where(and(eq(products.id, id), eq(products.isActive, true))).limit(1);
   if (!product) return c.json({ error: { code: "PRODUCT_NOT_FOUND", message: "Product not found" } }, 404);
 
-  const [shop] = await db.select({ id: shops.id }).from(shops).where(and(eq(shops.id, product.shopId), eq(shops.status, "approved"))).limit(1);
+  // Sprint 5: includes name/logoUrl, not just an existence check -- the PDP
+  // (§7.1) can be reached from places with no shop already loaded (the
+  // wishlist screen, in particular), so it carries just enough shop context
+  // to render a "from <shop>" line and a link back, without a second
+  // request for something this callsite already has in hand.
+  const [shop] = await db
+    .select({ id: shops.id, name: shops.name, logoUrl: shops.logoUrl })
+    .from(shops)
+    .where(and(eq(shops.id, product.shopId), eq(shops.status, "approved")))
+    .limit(1);
   if (!shop) return c.json({ error: { code: "PRODUCT_NOT_FOUND", message: "Product not found" } }, 404);
 
   const [variants, images] = await Promise.all([
@@ -490,7 +531,7 @@ catalogRoute.get("/products/:id", async (c) => {
     db.select().from(productImages).where(eq(productImages.productId, id)).orderBy(productImages.sortOrder),
   ]);
 
-  return c.json({ data: { ...product, variants, images } });
+  return c.json({ data: { ...product, variants, images, shop } });
 });
 
 catalogRoute.get("/shops/:shopId/sub-categories", async (c) => {

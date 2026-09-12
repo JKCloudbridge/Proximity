@@ -29,6 +29,17 @@ class AccountScreen extends ConsumerWidget {
             onTap: () => context.push('/addresses'),
           ),
           const Divider(height: 1),
+          // Sprint 5 -- wishlists (§4.10/§11). Protected route
+          // (app_router.dart's `_protectedPaths`), so this tile is the same
+          // "gated at the specific action" entry point Addresses already is
+          // here, not a new pattern.
+          ListTile(
+            leading: const Icon(Icons.favorite_border),
+            title: const Text('My Wishlist'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/wishlist'),
+          ),
+          const Divider(height: 1),
           // Anyone not already a rider/admin can apply -- a shop owner
           // moonlighting as a rider is an edge case the RPC already
           // tolerates (migrations/015 never downgrades an admin, but a

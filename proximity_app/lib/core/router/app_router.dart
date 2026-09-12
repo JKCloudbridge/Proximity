@@ -10,16 +10,22 @@ import '../../features/addresses/presentation/screens/address_list_screen.dart';
 import '../../features/auth/presentation/auth_provider.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
+import '../../features/product_detail/presentation/screens/product_detail_screen.dart';
 import '../../features/rider/presentation/screens/rider_onboarding_screen.dart';
+import '../../features/shop_detail/presentation/screens/shop_detail_screen.dart';
+import '../../features/wishlist/presentation/screens/wishlist_screen.dart';
 import '../../shared/widgets/app_shell.dart';
 import '../../shared/widgets/placeholder_screen.dart';
 
 /// Guests can browse (same rule as Baker Ally: login is gated at specific
 /// actions, not at the door). Sprint 2 adds /account and /rider/onboarding
-/// alongside Sprint 1's /addresses -- extend this list as each later sprint
-/// adds a route that actually needs a signed-in user (cart/checkout in
-/// Sprint 6/7, wishlist/orders in later sprints).
-const _protectedPaths = <String>['/addresses', '/account', '/rider'];
+/// alongside Sprint 1's /addresses; Sprint 5 adds /wishlist (own-user data,
+/// §5.2 -- routes/wishlist.ts requires a signed-in buyer for every call) --
+/// /shop/:id and /product/:id are deliberately NOT here, guests browse the
+/// full Home -> shop -> product path per §11's exit criteria, same as Home
+/// itself. Extend this list as each later sprint adds a route that actually
+/// needs a signed-in user (cart/checkout in Sprint 6/7, orders later).
+const _protectedPaths = <String>['/addresses', '/account', '/rider', '/wishlist'];
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authNotifier = ref.watch(authProvider.notifier);
@@ -44,6 +50,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/addresses/new', builder: (context, state) => const AddressFormScreen()),
       GoRoute(path: '/account', builder: (context, state) => const AccountScreen()),
       GoRoute(path: '/rider/onboarding', builder: (context, state) => const RiderOnboardingScreen()),
+      GoRoute(path: '/wishlist', builder: (context, state) => const WishlistScreen()),
+      GoRoute(path: '/shop/:id', builder: (context, state) => ShopDetailScreen(shopId: state.pathParameters['id']!)),
+      GoRoute(path: '/product/:id', builder: (context, state) => ProductDetailScreen(productId: state.pathParameters['id']!)),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => AppShell(navigationShell: navigationShell),
         branches: [

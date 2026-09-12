@@ -305,3 +305,49 @@ shopsRoute.get("/shops/near", zValidator("query", nearQuerySchema), async (c) =>
 
   return c.json({ data });
 });
+
+// Sprint 5: buyer-facing shop detail (§7.1) -- one shop, its NextSlotBadge
+// data, and enough fields to render the header above the vertical
+// category rail (catalog.ts's /shops/:shopId/sub-categories and
+// /shops/:shopId/products are the rail/grid data this screen pairs with).
+// Registered after /shops/near, not before, so a router that resolved
+// routes strictly in registration order would still try the literal
+// "near" segment first -- Hono's actual router prioritizes static segments
+// over a param capture regardless of order, but this costs nothing and
+// removes the question. Same public/unauthenticated shape as every other
+// buyer-facing route in this file/catalog.ts.
+shopsRoute.get("/shops/:id", async (c) => {
+  const shopId = c.req.param("id");
+
+  const [shop] = await db.select().from(shops).where(and(eq(shops.id, shopId), eq(shops.status, "approved"))).limit(1);
+  if (!shop) return c.json({ error: { code: "SHOP_NOT_FOUND", message: "Shop not found" } }, 404);
+
+  const [slotWindowRow] = await db.select().from(platformSettings).where(eq(platformSettings.key, "slot_window")).limit(1);
+  const slotWindow = (slotWindowRow?.value as SlotWindow | undefined) ?? DEFAULT_SLOT_WINDOW;
+  const now = new Date();
+  const weekday = istWeekday(now);
+  const [hours] = await db
+    .select()
+    .from(shopBusinessHours)
+    .where(and(eq(shopBusinessHours.shopId, shopId), eq(shopBusinessHours.weekday, weekday)))
+    .limit(1);
+
+  return c.json({
+    data: {
+      id: shop.id,
+      name: shop.name,
+      description: shop.description,
+      logoUrl: shop.logoUrl,
+      coverImageUrl: shop.coverImageUrl,
+      city: shop.city,
+      addressLine: shop.addressLine,
+      pincode: shop.pincode,
+      serviceRadiusKm: Number(shop.serviceRadiusKm),
+      supportsPickup: shop.supportsPickup,
+      supportsDelivery: shop.supportsDelivery,
+      deliveryMode: shop.deliveryMode,
+      minOrderValue: shop.minOrderValue,
+      nextSlot: computeNextSlot(now, slotWindow, hours ?? null),
+    },
+  });
+});
