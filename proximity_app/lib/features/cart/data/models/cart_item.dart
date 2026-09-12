@@ -97,14 +97,58 @@ class CartItemProduct {
   }
 }
 
+/// The cart screen only needs id/name/logo to render a section header --
+/// the fulfillment fields below exist for checkout (§7.4 step 1), which has
+/// to know which options each shop actually offers before it can ask the
+/// buyer to choose one. They ride along on `GET /v1/cart` rather than
+/// costing a per-shop request on the checkout screen; see routes/cart.ts's
+/// own comment on that select.
 class CartItemShop {
-  const CartItemShop({required this.id, required this.name, this.logoUrl});
+  const CartItemShop({
+    required this.id,
+    required this.name,
+    this.logoUrl,
+    required this.supportsPickup,
+    required this.supportsDelivery,
+    required this.deliveryMode,
+    required this.minOrderValue,
+  });
 
   final String id;
   final String name;
   final String? logoUrl;
+  final bool supportsPickup;
+  final bool supportsDelivery;
+
+  /// §1.3: `self` (the shop delivers, never a fee), `platform` (always a
+  /// Proximity rider, fee applies), or `both` (the buyer picks per order).
+  final String deliveryMode;
+  final int minOrderValue;
+
+  /// True only when §1.3 leaves a real choice to make -- otherwise the
+  /// delivery fulfiller is determined by the shop's own mode and the
+  /// checkout screen shouldn't be asking.
+  bool get deliveryFulfillerIsChoosable => deliveryMode == 'both';
+
+  /// The one legal fulfiller when there's no choice; null when there is one.
+  String? get fixedDeliveryFulfilledBy => switch (deliveryMode) {
+        'self' => 'shop',
+        'platform' => 'platform_rider',
+        _ => null,
+      };
 
   factory CartItemShop.fromJson(Map<String, dynamic> json) {
-    return CartItemShop(id: json['id'] as String, name: json['name'] as String, logoUrl: json['logoUrl'] as String?);
+    return CartItemShop(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      logoUrl: json['logoUrl'] as String?,
+      // Defaulted rather than required-from-JSON: these were added to the
+      // cart response in Sprint 7, and a cached/older response shape
+      // shouldn't hard-crash the cart screen, which doesn't use them at all.
+      supportsPickup: json['supportsPickup'] as bool? ?? true,
+      supportsDelivery: json['supportsDelivery'] as bool? ?? true,
+      deliveryMode: json['deliveryMode'] as String? ?? 'self',
+      minOrderValue: json['minOrderValue'] as int? ?? 0,
+    );
   }
 }
