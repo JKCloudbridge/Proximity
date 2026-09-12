@@ -3,6 +3,7 @@ import { and, asc, eq, inArray, sql } from "npm:drizzle-orm";
 import { db } from "./db.ts";
 import { addresses, discounts, orderGroups, orderItems, orders, shops, users } from "../db/schema.ts";
 import { invoicePdfExists, renderInvoicePdf, uploadInvoicePdf } from "./invoice.ts";
+import { assignRider } from "./riderAssignment.ts";
 
 // Sprint 7/8 -- moved out of routes/checkout.ts (Sprint 7) into its own lib
 // file this sprint specifically to give routes/payments.ts a second caller
@@ -161,21 +162,27 @@ async function ensureInvoiceForOrder(orderId: string): Promise<void> {
 /**
  * Sprint 8's one real write path for "a payment (or a pay-at-shop placement)
  * just got confirmed": calls rpc_confirm_payment (036), then generates an
- * invoice per order in the group. Three callers, one implementation:
+ * invoice per order in the group, then (Sprint 9) attempts rider assignment
+ * per order. Three callers, one implementation:
  *   * routes/checkout.ts's POST /orders, for pay_at_shop groups, immediately
  *     after rpc_place_order succeeds (see migrations/036's header for why
- *     that's the chosen trigger point for 'collected_at_shop').
+ *     that's the chosen trigger point for 'collected_at_shop'). In practice
+ *     this never finds a platform_rider order -- §1.4 refuses pay_at_shop
+ *     outright whenever one is present -- so the rider-assignment step
+ *     below is a harmless no-op on this path, not dead code kept out.
  *   * routes/payments.ts's verify-payment route, for the fast client-side
  *     confirmation path after a Razorpay Checkout success.
  *   * routes/payments.ts's webhook route, the authoritative online-path
  *     trigger.
  *
- * Invoice generation is deliberately best-effort per order: a PDF failure
- * for one shop's sub-order must not undo or re-fail the payment confirmation
- * that already committed, and must not block a sibling shop's own invoice.
- * Logged, not thrown -- routes/invoices.ts's own GET route self-heals a
- * missing PDF on demand (see that file), so a transient failure here isn't
- * permanent.
+ * Invoice generation and rider assignment are each deliberately best-effort
+ * per order: a PDF failure or a "no rider available right now" for one
+ * shop's sub-order must not undo or re-fail the payment confirmation that
+ * already committed, and must not block a sibling shop's own invoice or
+ * assignment. Both logged, not thrown -- routes/invoices.ts's own GET route
+ * self-heals a missing PDF on demand, and routes/shopOrders.ts's explicit
+ * assign-rider retry is the documented fallback for a rider-assignment
+ * failure here (migrations/039's own header names both).
  */
 export async function confirmPaymentAndGenerateInvoices(params: {
   groupId: string;
@@ -192,12 +199,28 @@ export async function confirmPaymentAndGenerateInvoices(params: {
     )
   `);
 
-  const orderRows = await db.select({ id: orders.id }).from(orders).where(eq(orders.orderGroupId, params.groupId));
+  const orderRows = await db
+    .select({ id: orders.id, deliveryFulfilledBy: orders.deliveryFulfilledBy })
+    .from(orders)
+    .where(eq(orders.orderGroupId, params.groupId));
+
   for (const row of orderRows) {
     try {
       await ensureInvoiceForOrder(row.id);
     } catch (err) {
       console.error(`Invoice generation failed for order ${row.id}`, err);
+    }
+
+    if (row.deliveryFulfilledBy === "platform_rider") {
+      try {
+        await assignRider(row.id);
+      } catch (err) {
+        // NO_RIDER_AVAILABLE is the expected, non-exceptional shape of this
+        // failure (migrations/039's header) -- logged so it's visible, not
+        // silently lost, but never re-thrown: routes/shopOrders.ts's manual
+        // retry is the documented recovery path, not a retry loop here.
+        console.error(`rpc_assign_rider failed for order ${row.id}`, err);
+      }
     }
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/realtime/order_status_channel.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/utils/currency.dart';
 import '../../../payments/presentation/attempt_online_payment.dart';
@@ -80,6 +81,17 @@ class _Body extends ConsumerStatefulWidget {
 class _BodyState extends ConsumerState<_Body> {
   bool _retrying = false;
 
+  // Sprint 9 -- §7.5's live tracking. Accumulated client-side per order id
+  // as Realtime pings arrive while this screen is open (a fresh session
+  // starts empty and fills in as things happen -- an honest "live from now"
+  // feed, not a full history backfill, which would need its own REST route
+  // this sprint doesn't add). Any ping also invalidates orderGroupProvider
+  // so the top-level status chip/payment-status/totals stay correct even
+  // for the events that don't get their own timeline line (see
+  // order_status_channel.dart and migrations/042's header for why some
+  // ladder steps share one orders.status value).
+  final Map<String, List<OrderStatusEvent>> _liveEvents = {};
+
   /// Sprint 8: same idempotent create-order/pay/verify sequence
   /// checkout_screen.dart's own post-placement attempt already runs -- one
   /// shared implementation (attemptOnlinePayment), two call sites. Re-fetches
@@ -97,6 +109,17 @@ class _BodyState extends ConsumerState<_Body> {
     final group = widget.group;
     final textTheme = Theme.of(context).textTheme;
     final needsPaymentRetry = group.paymentMode == 'online' && group.paymentStatus == 'pending';
+
+    // One subscription per screen, covering every shop-group's orders --
+    // orderStatusEventsProvider is keyed by this joined string (Riverpod
+    // .family needs a value-equal key, not a List, see that file's header).
+    final orderIdsKey = group.orders.map((o) => o.id).join(',');
+    ref.listen(orderStatusEventsProvider(orderIdsKey), (previous, next) {
+      next.whenData((event) {
+        setState(() => _liveEvents.putIfAbsent(event.orderId, () => []).add(event));
+        ref.invalidate(orderGroupProvider(widget.orderGroupId));
+      });
+    });
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
@@ -150,7 +173,8 @@ class _BodyState extends ConsumerState<_Body> {
         ],
         const SizedBox(height: 16),
         // One card per `orders` row -- §4.8's "one card per shop-group."
-        for (final order in group.orders) _OrderCard(order: order),
+        for (final order in group.orders)
+          _OrderCard(order: order, liveEvents: _liveEvents[order.id] ?? const []),
         const SizedBox(height: 8),
         _TotalsCard(group: group),
       ],
@@ -158,10 +182,37 @@ class _BodyState extends ConsumerState<_Body> {
   }
 }
 
+/// Sprint 9 -- raw order_status_history.status words -> what the buyer
+/// reads. Deliberately a superset of _StatusChip's own switch below: some of
+/// these (rider_assigned, rider_accepted, picked_up) are never
+/// `orders.status` values at all (migrations/039/041/042's own headers
+/// explain why) -- they only ever show up here, in the live feed, not in
+/// the status chip.
+String _liveEventLabel(String status) {
+  return switch (status) {
+    'rider_assigned' => 'A rider has been assigned',
+    'rider_accepted' => 'The rider accepted this delivery',
+    'picked_up' => 'Picked up by the rider',
+    'out_for_delivery' => 'Out for delivery',
+    'delivered' => 'Delivered',
+    'preparing' => 'The shop is preparing your order',
+    'ready_for_pickup' => 'Ready',
+    'completed' => 'Completed',
+    'confirmed' => 'Confirmed',
+    _ => status,
+  };
+}
+
 class _OrderCard extends ConsumerWidget {
-  const _OrderCard({required this.order});
+  const _OrderCard({required this.order, this.liveEvents = const []});
 
   final OrderGroupOrder order;
+
+  /// §7.5's live tracking -- events received over Realtime while this
+  /// screen has been open, oldest first. Empty on a fresh screen open; not
+  /// a full history (see _BodyState's own comment for why that's an honest,
+  /// deliberate scope cut, not a bug).
+  final List<OrderStatusEvent> liveEvents;
 
   Future<void> _viewInvoice(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
@@ -215,6 +266,15 @@ class _OrderCard extends ConsumerWidget {
           _line(context, icon: Icons.schedule, text: _slotLabel(order)),
           if (!order.isPickup && order.addressLine != null)
             _line(context, icon: Icons.location_on_outlined, text: order.addressLine!),
+          // Sprint 9 -- §7.5's "no polling" live feed. Only ever shows
+          // events received since this screen opened (see liveEvents' own
+          // doc comment) -- silent, not missing, when nothing has happened
+          // yet.
+          if (liveEvents.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            for (final event in liveEvents)
+              _line(context, icon: Icons.bolt, text: _liveEventLabel(event.status)),
+          ],
           const Divider(height: 18),
           for (final item in order.items)
             Padding(

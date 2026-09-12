@@ -13,9 +13,11 @@ import '../../features/cart/presentation/screens/cart_screen.dart';
 import '../../features/checkout/presentation/screens/checkout_screen.dart';
 import '../../features/checkout/presentation/screens/order_confirmation_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
+import '../../features/checkout/presentation/screens/my_orders_screen.dart';
 import '../../features/product_detail/presentation/screens/product_detail_screen.dart';
 import '../../features/rider/presentation/screens/rider_onboarding_screen.dart';
 import '../../features/shop_detail/presentation/screens/shop_detail_screen.dart';
+import '../../features/shop_orders/presentation/screens/shop_orders_screen.dart';
 import '../../features/wishlist/presentation/screens/wishlist_screen.dart';
 import '../../shared/widgets/app_shell.dart';
 import '../../shared/widgets/placeholder_screen.dart';
@@ -34,7 +36,20 @@ import '../../shared/widgets/placeholder_screen.dart';
 /// "gated at the specific action, not at the door" rule WishlistHeartButton
 /// already follows). Extend this list as each later sprint adds a *pushed*
 /// route that needs a signed-in user (checkout in Sprint 7, orders later).
-const _protectedPaths = <String>['/addresses', '/account', '/rider', '/wishlist', '/checkout', '/order-groups'];
+/// Sprint 9 adds `/orders` (My Orders, own-user data) and `/shop-orders`
+/// (shop-team data -- a guest or non-team buyer just sees "you're not part
+/// of any shop's team yet" from the screen itself once signed in, same as
+/// every other shop-scoped surface in this app).
+const _protectedPaths = <String>[
+  '/addresses',
+  '/account',
+  '/rider',
+  '/wishlist',
+  '/checkout',
+  '/order-groups',
+  '/orders',
+  '/shop-orders',
+];
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authNotifier = ref.watch(authProvider.notifier);
@@ -69,6 +84,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/order-groups/:id',
         builder: (context, state) => OrderConfirmationScreen(orderGroupId: state.pathParameters['id']!),
       ),
+      // Sprint 9 -- the "reachable later too" entry points this sprint's
+      // live-tracking work needed (see MyOrdersScreen/GET /v1/order-groups'
+      // own headers, and routes/shopOrders.ts's for the shop side).
+      GoRoute(path: '/orders', builder: (context, state) => const MyOrdersScreen()),
+      GoRoute(path: '/shop-orders', builder: (context, state) => const ShopOrdersScreen()),
       GoRoute(path: '/shop/:id', builder: (context, state) => ShopDetailScreen(shopId: state.pathParameters['id']!)),
       GoRoute(path: '/product/:id', builder: (context, state) => ProductDetailScreen(productId: state.pathParameters['id']!)),
       StatefulShellRoute.indexedStack(

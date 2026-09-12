@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'models/checkout_config.dart';
 import 'models/fulfillment_slot.dart';
 import 'models/order_group.dart';
+import 'models/order_group_summary.dart';
 
 /// Sprint 7 (§7.4). Everything except the slot read needs a signed-in buyer
 /// (routes/checkout.ts gates `/checkout/*`, `/orders*`, `/order-groups/*`
@@ -80,5 +81,15 @@ class CheckoutRepository {
       if (err.response?.statusCode == 404) return null;
       rethrow;
     }
+  }
+
+  /// Sprint 9 -- the minimal "My Orders" list (see order_group_summary.dart
+  /// and GET /v1/order-groups' own header for exactly why this exists and
+  /// why it's deliberately not Sprint 10's full Order History).
+  Future<List<OrderGroupSummary>> getOrderGroups() async {
+    final response = await _dio.get<Map<String, dynamic>>('/v1/order-groups');
+    return (response.data!['data'] as List)
+        .map((e) => OrderGroupSummary.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 }

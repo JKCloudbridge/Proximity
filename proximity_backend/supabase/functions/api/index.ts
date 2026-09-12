@@ -15,6 +15,7 @@ import { recommendationsRoute } from "./routes/recommendations.ts";
 import { checkoutRoute } from "./routes/checkout.ts";
 import { paymentsRoute, paymentsWebhookRoute } from "./routes/payments.ts";
 import { invoicesRoute } from "./routes/invoices.ts";
+import { shopOrdersRoute } from "./routes/shopOrders.ts";
 
 // Deployed as one Edge Function (`supabase functions deploy api`), reachable
 // at https://<ref>.supabase.co/functions/v1/api/v1/... -- same shape as
@@ -48,6 +49,7 @@ app.route("/v1", recommendationsRoute);
 app.route("/v1", checkoutRoute);
 app.route("/v1", paymentsRoute);
 app.route("/v1", invoicesRoute);
+app.route("/v1", shopOrdersRoute);
 // Not under authMiddleware, not CORS-restricted -- Razorpay's own server
 // calls this directly (server-to-server), never a browser or this app's own
 // Flutter client. paymentsRoute (above) still gates its own /order-groups/*

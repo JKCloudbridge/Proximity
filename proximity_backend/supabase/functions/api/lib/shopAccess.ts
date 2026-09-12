@@ -41,6 +41,17 @@ export async function isShopWriter(userId: string, shopId: string): Promise<bool
   return role === "owner" || role === "staff";
 }
 
+// Sprint 9 -- §5.3's "View orders & accept/advance status" row: ALL three
+// member_roles (owner/staff/delivery) get this right, unlike isShopWriter's
+// owner-or-staff-only catalog gate. routes/shopOrders.ts's order list and
+// advance-status route use this; the rider-assignment trigger route uses
+// isShopWriter instead (deliberately narrower -- see that route's own
+// comment for why handing an order to the platform's rider network is an
+// owner/staff-level operational call, not a delivery-role action).
+export async function isShopMember(userId: string, shopId: string): Promise<boolean> {
+  return (await getShopMembership(userId, shopId)) !== null;
+}
+
 export async function shopIdsForUser(userId: string): Promise<string[]> {
   const rows = await db.select({ shopId: shopTeamMembers.shopId }).from(shopTeamMembers).where(eq(shopTeamMembers.userId, userId));
   return rows.map((r) => r.shopId);

@@ -6,12 +6,14 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../auth/presentation/auth_provider.dart';
 import '../../data/models/rider_profile.dart';
 import '../providers/rider_providers.dart';
+import 'rider_home_screen.dart';
 
-/// §8.5's "lightweight in-app view" rider touchpoint, Sprint 2's slice of
-/// it: signup + KYC upload -> is_verified=false -> wait for admin. The
-/// online/offline toggle and the assignment/delivery ladder are Sprint 9
-/// (§8.5, §11) -- this screen only needs to get a rider profile created and
-/// show its approval status, not the working-rider experience.
+/// §8.5's "lightweight in-app view" rider touchpoint. Sprint 2 built
+/// signup + KYC upload -> is_verified=false -> wait for admin; Sprint 9
+/// adds the actual working-rider experience (RiderHomeScreen) once
+/// `profile.isVerified` -- this screen still owns the branch between "not
+/// verified yet" and "verified," it just hands off to a real screen for the
+/// second case now instead of a static placeholder.
 ///
 /// One screen, not two -- whether the caller sees the form or the status
 /// card is decided by whether `myRiderProfileProvider` already has data,
@@ -23,15 +25,20 @@ class RiderOnboardingScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(myRiderProfileProvider);
+    // riverpod 3.x's AsyncValue.value is a plain nullable getter (the old
+    // valueOrNull), checked against the actually-installed 3.4.2 source.
+    final title = profileAsync.value?.isVerified == true ? 'Deliveries' : 'Become a rider';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Become a rider')),
+      appBar: AppBar(title: Text(title)),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, _) => Center(child: Text('Could not load your rider status: $err')),
         data: (profile) => profile == null
             ? const _RiderOnboardingForm()
-            : _RiderStatusCard(profile: profile),
+            : profile.isVerified
+                ? RiderHomeScreen(profile: profile)
+                : _RiderStatusCard(profile: profile),
       ),
     );
   }
