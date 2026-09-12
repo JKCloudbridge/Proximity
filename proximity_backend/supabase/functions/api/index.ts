@@ -5,6 +5,9 @@ import { healthRoute } from "./routes/health.ts";
 import { authRoute } from "./routes/auth.ts";
 import { addressesRoute } from "./routes/addresses.ts";
 import { categoriesRoute } from "./routes/categories.ts";
+import { shopsRoute } from "./routes/shops.ts";
+import { ridersRoute } from "./routes/riders.ts";
+import { adminRoute } from "./routes/admin.ts";
 
 // Deployed as one Edge Function (`supabase functions deploy api`), reachable
 // at https://<ref>.supabase.co/functions/v1/api/v1/... -- same shape as
@@ -12,11 +15,12 @@ import { categoriesRoute } from "./routes/categories.ts";
 // part (see proximity_app/lib/core/config/env.dart).
 const app = new Hono().basePath("/api");
 
-// Only proximity_web (Sprint 2+, shopkeeper dashboard/admin) is ever
-// browser-called -- Flutter never triggers a CORS preflight. Explicit
-// origin allowlist, not "*", since these routes carry real bearer tokens.
-// Unset ADMIN_WEB_ORIGIN is fine for Sprint 1 -- nothing under /v1/shop/*
-// or /v1/admin/* exists yet.
+// Only proximity_web (Sprint 2's shopkeeper dashboard/admin) is ever
+// browser-called -- Flutter never triggers a CORS preflight, and
+// /v1/rider/* is mobile-only, so it's deliberately not in this allowlist.
+// Explicit origin allowlist, not "*", since these routes carry real bearer
+// tokens. Unset ADMIN_WEB_ORIGIN still degrades gracefully (no CORS
+// headers at all) until proximity_web's deployed origin is known.
 const adminWebOrigin = Deno.env.get("ADMIN_WEB_ORIGIN");
 if (adminWebOrigin) {
   app.use("/v1/shop/*", cors({ origin: adminWebOrigin, allowHeaders: ["Authorization", "Content-Type"] }));
@@ -27,6 +31,9 @@ app.route("/v1", healthRoute);
 app.route("/v1", authRoute);
 app.route("/v1", addressesRoute);
 app.route("/v1", categoriesRoute);
+app.route("/v1", shopsRoute);
+app.route("/v1", ridersRoute);
+app.route("/v1", adminRoute);
 
 app.onError((err, c) => {
   console.error(err);

@@ -4,19 +4,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/account/presentation/account_screen.dart';
 import '../../features/addresses/presentation/screens/address_form_screen.dart';
 import '../../features/addresses/presentation/screens/address_list_screen.dart';
 import '../../features/auth/presentation/auth_provider.dart';
 import '../../features/auth/presentation/login_screen.dart';
+import '../../features/rider/presentation/screens/rider_onboarding_screen.dart';
 import '../../shared/widgets/app_shell.dart';
 import '../../shared/widgets/placeholder_screen.dart';
 
 /// Guests can browse (same rule as Baker Ally: login is gated at specific
-/// actions, not at the door) -- /addresses is the only protected route that
-/// exists in Sprint 1. Extend this list as each later sprint adds a route
-/// that actually needs a signed-in user (cart/checkout in Sprint 6/7,
-/// wishlist/orders in later sprints).
-const _protectedPaths = <String>['/addresses'];
+/// actions, not at the door). Sprint 2 adds /account and /rider/onboarding
+/// alongside Sprint 1's /addresses -- extend this list as each later sprint
+/// adds a route that actually needs a signed-in user (cart/checkout in
+/// Sprint 6/7, wishlist/orders in later sprints).
+const _protectedPaths = <String>['/addresses', '/account', '/rider'];
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authNotifier = ref.watch(authProvider.notifier);
@@ -39,6 +41,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(path: '/addresses', builder: (context, state) => const AddressListScreen()),
       GoRoute(path: '/addresses/new', builder: (context, state) => const AddressFormScreen()),
+      GoRoute(path: '/account', builder: (context, state) => const AccountScreen()),
+      GoRoute(path: '/rider/onboarding', builder: (context, state) => const RiderOnboardingScreen()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => AppShell(navigationShell: navigationShell),
         branches: [

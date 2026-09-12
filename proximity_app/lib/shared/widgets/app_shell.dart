@@ -76,7 +76,7 @@ class _TopBar extends ConsumerWidget {
               if (!isLoggedIn) {
                 context.push('/login');
               } else {
-                context.push('/addresses');
+                context.push('/account');
               }
             },
             icon: CircleAvatar(

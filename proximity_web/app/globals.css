@@ -1,0 +1,101 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* SPRINT_PLANNING.md §6's design system, same palette as
+   proximity_app/lib/core/theme/app_theme.dart's AppColors -- hex values
+   copied verbatim from there rather than converted to oklch (shadcn's own
+   default init would generate oklch tokens) so the two apps' brand colors
+   stay visibly the same source of truth instead of two independent
+   approximations of "teal." */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.625rem;
+
+  --background: #ffffff;
+  --foreground: #221b1a; /* ink */
+  --card: #ffffff;
+  --card-foreground: #221b1a;
+  --popover: #ffffff;
+  --popover-foreground: #221b1a;
+
+  --primary: #0f7a5c; /* brand teal */
+  --primary-foreground: #ffffff;
+  --secondary: #e4f3ec; /* brandTint */
+  --secondary-foreground: #0a5a43; /* brandDark */
+
+  --muted: #fbf7f2; /* cream */
+  --muted-foreground: #7a7370; /* inkSoft */
+
+  --accent: #f2a73c; /* marigold -- badges only, per §6, never as a text/bg pairing that needs body-text contrast */
+  --accent-foreground: #221b1a;
+
+  --destructive: #e4572e; /* terracotta */
+  --destructive-foreground: #ffffff;
+
+  --border: #e9e2d8; /* hairline */
+  --input: #e9e2d8;
+  --ring: #0f7a5c;
+}
+
+.dark {
+  --background: #16211d;
+  --foreground: #f3efe9;
+  --card: #1c2b26;
+  --card-foreground: #f3efe9;
+  --popover: #1c2b26;
+  --popover-foreground: #f3efe9;
+
+  --primary: #3fa184; /* success -- lighter tint of the brand family, readable on a dark ground */
+  --primary-foreground: #0a1613;
+  --secondary: #23342d;
+  --secondary-foreground: #cdece1;
+
+  --muted: #23342d;
+  --muted-foreground: #a7a19c;
+
+  --accent: #f2a73c;
+  --accent-foreground: #221b1a;
+
+  --destructive: #e4572e;
+  --destructive-foreground: #ffffff;
+
+  --border: #2c3e37;
+  --input: #2c3e37;
+  --ring: #3fa184;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
