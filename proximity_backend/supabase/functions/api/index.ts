@@ -10,6 +10,8 @@ import { ridersRoute } from "./routes/riders.ts";
 import { adminRoute } from "./routes/admin.ts";
 import { catalogRoute } from "./routes/catalog.ts";
 import { wishlistRoute } from "./routes/wishlist.ts";
+import { cartRoute } from "./routes/cart.ts";
+import { recommendationsRoute } from "./routes/recommendations.ts";
 
 // Deployed as one Edge Function (`supabase functions deploy api`), reachable
 // at https://<ref>.supabase.co/functions/v1/api/v1/... -- same shape as
@@ -38,6 +40,8 @@ app.route("/v1", ridersRoute);
 app.route("/v1", adminRoute);
 app.route("/v1", catalogRoute);
 app.route("/v1", wishlistRoute);
+app.route("/v1", cartRoute);
+app.route("/v1", recommendationsRoute);
 
 app.onError((err, c) => {
   console.error(err);

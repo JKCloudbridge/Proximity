@@ -9,6 +9,7 @@ import '../../features/addresses/presentation/screens/address_form_screen.dart';
 import '../../features/addresses/presentation/screens/address_list_screen.dart';
 import '../../features/auth/presentation/auth_provider.dart';
 import '../../features/auth/presentation/login_screen.dart';
+import '../../features/cart/presentation/screens/cart_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/product_detail/presentation/screens/product_detail_screen.dart';
 import '../../features/rider/presentation/screens/rider_onboarding_screen.dart';
@@ -23,8 +24,14 @@ import '../../shared/widgets/placeholder_screen.dart';
 /// §5.2 -- routes/wishlist.ts requires a signed-in buyer for every call) --
 /// /shop/:id and /product/:id are deliberately NOT here, guests browse the
 /// full Home -> shop -> product path per §11's exit criteria, same as Home
-/// itself. Extend this list as each later sprint adds a route that actually
-/// needs a signed-in user (cart/checkout in Sprint 6/7, orders later).
+/// itself. /cart is ALSO deliberately not here despite being own-user data
+/// too (§5.2) -- unlike /wishlist (a pushed route), /cart is a bottom-nav
+/// tab baked into the StatefulShellRoute below, always one tap away; gating
+/// it here would mean redirecting straight out of the shell the moment a
+/// guest taps "Cart," a worse UX than CartScreen's own sign-in prompt (same
+/// "gated at the specific action, not at the door" rule WishlistHeartButton
+/// already follows). Extend this list as each later sprint adds a *pushed*
+/// route that needs a signed-in user (checkout in Sprint 7, orders later).
 const _protectedPaths = <String>['/addresses', '/account', '/rider', '/wishlist'];
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -58,7 +65,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         branches: [
           StatefulShellBranch(routes: [GoRoute(path: '/', builder: (c, s) => const HomeScreen())]),
           StatefulShellBranch(routes: [GoRoute(path: '/categories', builder: (c, s) => const PlaceholderScreen(title: 'Categories'))]),
-          StatefulShellBranch(routes: [GoRoute(path: '/cart', builder: (c, s) => const PlaceholderScreen(title: 'Cart'))]),
+          StatefulShellBranch(routes: [GoRoute(path: '/cart', builder: (c, s) => const CartScreen())]),
           StatefulShellBranch(routes: [GoRoute(path: '/order-again', builder: (c, s) => const PlaceholderScreen(title: 'Order Again'))]),
         ],
       ),

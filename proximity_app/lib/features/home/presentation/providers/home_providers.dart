@@ -12,6 +12,7 @@ import '../../../auth/presentation/auth_provider.dart';
 import '../../data/home_repository.dart';
 import '../../data/models/category.dart';
 import '../../data/models/nearby_shop.dart';
+import '../../data/models/recommended_product.dart';
 
 final homeRepositoryProvider = Provider<HomeRepository>((ref) {
   return HomeRepository(dio: ref.watch(dioProvider));
@@ -74,4 +75,19 @@ final nearbyShopsProvider = FutureProvider<List<NearbyShop>>((ref) async {
   if (location == null) return const [];
   final categoryId = ref.watch(selectedCategoryIdProvider);
   return ref.watch(homeRepositoryProvider).getNearbyShops(lat: location.lat, lng: location.lng, categoryId: categoryId);
+});
+
+/// Sprint 6's "Recommended for you" (§7.1) -- the second of Home's three
+/// named sections to actually get built (Shops-near-you was Sprint 4;
+/// Frequently-Bought is Sprint 10's job, order history doesn't exist yet).
+/// Deliberately does NOT watch [selectedCategoryIdProvider] -- §7.1's
+/// "category-click filtering across sections" was named for Shops-near-you
+/// specifically, and a personalized/trending feed re-filtering by the same
+/// chips would need its own product-category join this endpoint doesn't do;
+/// revisit if a later sprint's feedback actually asks for it. Re-fetches
+/// only when location changes.
+final recommendedProductsProvider = FutureProvider<List<RecommendedProduct>>((ref) async {
+  final location = await ref.watch(buyerLocationProvider.future);
+  if (location == null) return const [];
+  return ref.watch(homeRepositoryProvider).getRecommended(lat: location.lat, lng: location.lng);
 });

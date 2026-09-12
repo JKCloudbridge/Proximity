@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import 'models/category.dart';
 import 'models/nearby_shop.dart';
+import 'models/recommended_product.dart';
 
 class HomeRepository {
   HomeRepository({required Dio dio}) : _dio = dio;
@@ -28,5 +29,16 @@ class HomeRepository {
     );
     final rows = response.data!['data'] as List<dynamic>;
     return rows.map((e) => NearbyShop.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// `GET /v1/recommended` (routes/recommendations.ts, Sprint 6) --
+  /// unauthenticated route, but Dio's own interceptor (dio_client.dart)
+  /// already attaches a bearer token whenever one exists, so a signed-in
+  /// buyer gets the wishlist-personalized ranking for free with no extra
+  /// parameter here; a guest gets the plain trending fallback.
+  Future<List<RecommendedProduct>> getRecommended({required double lat, required double lng}) async {
+    final response = await _dio.get<Map<String, dynamic>>('/v1/recommended', queryParameters: {'lat': lat, 'lng': lng});
+    final rows = response.data!['data'] as List<dynamic>;
+    return rows.map((e) => RecommendedProduct.fromJson(e as Map<String, dynamic>)).toList();
   }
 }

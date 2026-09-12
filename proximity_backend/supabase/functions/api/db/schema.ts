@@ -260,3 +260,67 @@ export const wishlists = pgTable(
   },
   (table) => [unique("wishlists_user_id_product_id_key").on(table.userId, table.productId)],
 );
+
+// Sprint 6 (migrations/022) -- see that file's header for where this
+// table's DDL actually came from (Baker Ally's recovered v1 original, not a
+// fresh prose-only design like wishlists above). One cart per user; created
+// lazily by rpc_add_to_cart (024), never at signup.
+export const carts = pgTable("carts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Sprint 6 (migrations/023) -- literal DDL from SPRINT_PLANNING.md §1.5, no
+// shop lock (that section's own point: the multi-shop cart's shop grouping
+// is client-side presentation, not a data-model constraint). Rows are
+// written through rpc_add_to_cart (024) for the upsert-on-add path; plain
+// Drizzle update/delete for the cart screen's quantity stepper and
+// remove/remove-all-from-shop actions (routes/cart.ts), same "not every
+// multi-statement write needs SECURITY DEFINER" judgment call as shops.ts's
+// business-hours PUT.
+export const cartItems = pgTable(
+  "cart_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    cartId: uuid("cart_id")
+      .notNull()
+      .references(() => carts.id, { onDelete: "cascade" }),
+    variantId: uuid("variant_id")
+      .notNull()
+      .references(() => productVariants.id, { onDelete: "cascade" }),
+    quantity: integer("quantity").notNull().default(1),
+    addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("cart_items_cart_id_variant_id_key").on(table.cartId, table.variantId)],
+);
+
+// Sprint 6 (migrations/025) -- see that file's header for where this
+// table's DDL came from (Baker Ally's recovered v1 original, §9's reuse
+// map). No route writes this yet (no admin curation UI exists this
+// sprint) -- routes/recommendations.ts reads it, always finding zero rows
+// in practice until that curation UI exists; see that file's header.
+export const productCrossSell = pgTable(
+  "product_cross_sell",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sourceProductId: uuid("source_product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    recommendedProductId: uuid("recommended_product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("product_cross_sell_source_product_id_recommended_product_id_key").on(
+      table.sourceProductId,
+      table.recommendedProductId,
+    ),
+  ],
+);
