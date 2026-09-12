@@ -4,13 +4,13 @@
     "strict": true
   },
   "imports": {
-    "hono": "npm:hono@^4.6.0",
-    "hono/": "npm:/hono@^4.6.0/",
-    "zod": "npm:zod@^3.23.0",
-    "@hono/zod-validator": "npm:@hono/zod-validator@^0.4.1",
-    "drizzle-orm": "npm:drizzle-orm@^0.36.0",
-    "drizzle-orm/": "npm:/drizzle-orm@^0.36.0/",
-    "postgres": "npm:postgres@^3.4.0",
-    "@supabase/supabase-js": "npm:@supabase/supabase-js@^2.45.0"
+    "npm:hono": "npm:hono@^4.6.0",
+    "npm:hono/": "npm:hono@^4.6.0/",
+    "npm:zod": "npm:zod@^3.23.0",
+    "npm:@hono/zod-validator": "npm:@hono/zod-validator@^0.4.1",
+    "npm:drizzle-orm": "npm:drizzle-orm@^0.36.0",
+    "npm:drizzle-orm/": "npm:drizzle-orm@^0.36.0/",
+    "npm:postgres": "npm:postgres@^3.4.0",
+    "npm:@supabase/supabase-js": "npm:@supabase/supabase-js@^2.45.0"
   }
 }
