@@ -48,6 +48,7 @@ dependencies:
   cached_network_image: ^3.4.1
   flutter_form_builder: ^10.3.0+2
   form_builder_validators: ^11.3.0
+  image_picker: ^1.2.3
 
 dev_dependencies:
   flutter_test:
