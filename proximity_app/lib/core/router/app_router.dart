@@ -9,6 +9,7 @@ import '../../features/addresses/presentation/screens/address_form_screen.dart';
 import '../../features/addresses/presentation/screens/address_list_screen.dart';
 import '../../features/auth/presentation/auth_provider.dart';
 import '../../features/auth/presentation/login_screen.dart';
+import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/rider/presentation/screens/rider_onboarding_screen.dart';
 import '../../shared/widgets/app_shell.dart';
 import '../../shared/widgets/placeholder_screen.dart';
@@ -46,7 +47,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => AppShell(navigationShell: navigationShell),
         branches: [
-          StatefulShellBranch(routes: [GoRoute(path: '/', builder: (c, s) => const PlaceholderScreen(title: 'Home'))]),
+          StatefulShellBranch(routes: [GoRoute(path: '/', builder: (c, s) => const HomeScreen())]),
           StatefulShellBranch(routes: [GoRoute(path: '/categories', builder: (c, s) => const PlaceholderScreen(title: 'Categories'))]),
           StatefulShellBranch(routes: [GoRoute(path: '/cart', builder: (c, s) => const PlaceholderScreen(title: 'Cart'))]),
           StatefulShellBranch(routes: [GoRoute(path: '/order-again', builder: (c, s) => const PlaceholderScreen(title: 'Order Again'))]),

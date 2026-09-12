@@ -1,12 +1,13 @@
 import { Hono } from "npm:hono";
 import { zValidator } from "npm:@hono/zod-validator";
 import { z } from "npm:zod";
-import { eq, inArray, sql } from "npm:drizzle-orm";
+import { and, eq, inArray, sql } from "npm:drizzle-orm";
 
 import { authMiddleware, type AuthEnv } from "../middleware/auth.ts";
 import { db } from "../lib/db.ts";
-import { shopBusinessHours, shops } from "../db/schema.ts";
+import { platformSettings, shopBusinessHours, shops } from "../db/schema.ts";
 import { getShopMembership, isShopOwner, shopIdsForUser } from "../lib/shopAccess.ts";
+import { computeNextSlot, DEFAULT_SLOT_WINDOW, istWeekday, type SlotWindow } from "../lib/slots.ts";
 
 export const shopsRoute = new Hono<AuthEnv>();
 
@@ -203,3 +204,104 @@ shopsRoute.put(
     return c.json({ data: rows });
   },
 );
+
+// ---------------------------------------------------------------------------
+// Buyer-facing "Shops near you" -- Sprint 4 (§7.1/§7.2). Public, unauthenticated
+// (Home renders for guests too, same rule as categories.ts). No /shop/ prefix,
+// so authMiddleware above doesn't apply -- same public/team split catalog.ts
+// already established.
+//
+// `location` has no Drizzle column type (see schema.ts's header), so
+// distance itself is computed in a raw SQL fragment; everything past that
+// point is re-shaped into a plain camelCase object by hand rather than
+// returned as db.execute's raw rows, which come back snake_case straight
+// from Postgres (the same landmine flagged in this file's POST /shop/shops
+// comment) -- no reason to let that leak into a brand-new response shape.
+// ---------------------------------------------------------------------------
+
+const nearQuerySchema = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lng: z.coerce.number().min(-180).max(180),
+  categoryId: z.string().uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+type ShopDistanceRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  logo_url: string | null;
+  cover_image_url: string | null;
+  city: string;
+  address_line: string;
+  service_radius_km: string;
+  supports_pickup: boolean;
+  supports_delivery: boolean;
+  delivery_mode: string;
+  min_order_value: number;
+  distance_m: number;
+};
+
+shopsRoute.get("/shops/near", zValidator("query", nearQuerySchema), async (c) => {
+  const { lat, lng, categoryId, limit } = c.req.valid("query");
+  const maxResults = limit ?? 30;
+
+  // ST_DWithin(..., 50000) hits idx_shops_location (migrations/006's GIST
+  // index) before the exact per-shop service_radius_km cut below narrows
+  // further -- 50km is createShopSchema's own serviceRadiusKm ceiling
+  // (this file, above), so no shop's real radius can ever exceed it; this
+  // is purely an index-friendly pre-filter, not a second business rule.
+  const rows = (await db.execute(sql`
+    SELECT id, name, description, logo_url, cover_image_url, city, address_line,
+           service_radius_km, supports_pickup, supports_delivery, delivery_mode, min_order_value,
+           ST_Distance(location, ST_SetSRID(ST_MakePoint(${lng}::double precision, ${lat}::double precision), 4326)::geography) AS distance_m
+    FROM shops
+    WHERE status = 'approved'
+      AND ST_DWithin(location, ST_SetSRID(ST_MakePoint(${lng}::double precision, ${lat}::double precision), 4326)::geography, 50000)
+      ${
+    categoryId
+      ? sql`AND EXISTS (SELECT 1 FROM products p WHERE p.shop_id = shops.id AND p.category_id = ${categoryId}::uuid AND p.is_active = true)`
+      : sql``
+  }
+  `)) as unknown as ShopDistanceRow[];
+
+  const nearby = rows
+    .filter((r) => r.distance_m <= Number(r.service_radius_km) * 1000)
+    .sort((a, b) => a.distance_m - b.distance_m)
+    .slice(0, maxResults);
+
+  if (nearby.length === 0) return c.json({ data: [] });
+
+  // §7.2's NextSlotBadge -- one platform_settings read + one business-hours
+  // read for today's weekday, shared across every shop in this response
+  // rather than a per-shop round trip.
+  const [slotWindowRow] = await db.select().from(platformSettings).where(eq(platformSettings.key, "slot_window")).limit(1);
+  const slotWindow = (slotWindowRow?.value as SlotWindow | undefined) ?? DEFAULT_SLOT_WINDOW;
+  const now = new Date();
+  const weekday = istWeekday(now);
+  const shopIds = nearby.map((s) => s.id);
+  const hoursRows = await db
+    .select()
+    .from(shopBusinessHours)
+    .where(and(inArray(shopBusinessHours.shopId, shopIds), eq(shopBusinessHours.weekday, weekday)));
+  const hoursByShop = new Map(hoursRows.map((h) => [h.shopId, h]));
+
+  const data = nearby.map((s) => ({
+    id: s.id,
+    name: s.name,
+    description: s.description,
+    logoUrl: s.logo_url,
+    coverImageUrl: s.cover_image_url,
+    city: s.city,
+    addressLine: s.address_line,
+    serviceRadiusKm: Number(s.service_radius_km),
+    supportsPickup: s.supports_pickup,
+    supportsDelivery: s.supports_delivery,
+    deliveryMode: s.delivery_mode,
+    minOrderValue: s.min_order_value,
+    distanceKm: Math.round((s.distance_m / 1000) * 10) / 10,
+    nextSlot: computeNextSlot(now, slotWindow, hoursByShop.get(s.id) ?? null),
+  }));
+
+  return c.json({ data });
+});
