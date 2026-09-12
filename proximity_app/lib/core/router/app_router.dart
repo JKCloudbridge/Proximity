@@ -10,6 +10,8 @@ import '../../features/addresses/presentation/screens/address_list_screen.dart';
 import '../../features/auth/presentation/auth_provider.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/cart/presentation/screens/cart_screen.dart';
+import '../../features/checkout/presentation/screens/checkout_screen.dart';
+import '../../features/checkout/presentation/screens/order_confirmation_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/product_detail/presentation/screens/product_detail_screen.dart';
 import '../../features/rider/presentation/screens/rider_onboarding_screen.dart';
@@ -32,7 +34,7 @@ import '../../shared/widgets/placeholder_screen.dart';
 /// "gated at the specific action, not at the door" rule WishlistHeartButton
 /// already follows). Extend this list as each later sprint adds a *pushed*
 /// route that needs a signed-in user (checkout in Sprint 7, orders later).
-const _protectedPaths = <String>['/addresses', '/account', '/rider', '/wishlist'];
+const _protectedPaths = <String>['/addresses', '/account', '/rider', '/wishlist', '/checkout', '/order-groups'];
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authNotifier = ref.watch(authProvider.notifier);
@@ -58,6 +60,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/account', builder: (context, state) => const AccountScreen()),
       GoRoute(path: '/rider/onboarding', builder: (context, state) => const RiderOnboardingScreen()),
       GoRoute(path: '/wishlist', builder: (context, state) => const WishlistScreen()),
+      // Sprint 7 (§7.4). Both are pushed routes rather than shell tabs, and
+      // both are own-user data, so unlike /cart they genuinely do belong in
+      // `_protectedPaths` above -- a guest can never reach either one with a
+      // cart to check out in the first place.
+      GoRoute(path: '/checkout', builder: (context, state) => const CheckoutScreen()),
+      GoRoute(
+        path: '/order-groups/:id',
+        builder: (context, state) => OrderConfirmationScreen(orderGroupId: state.pathParameters['id']!),
+      ),
       GoRoute(path: '/shop/:id', builder: (context, state) => ShopDetailScreen(shopId: state.pathParameters['id']!)),
       GoRoute(path: '/product/:id', builder: (context, state) => ProductDetailScreen(productId: state.pathParameters['id']!)),
       StatefulShellRoute.indexedStack(

@@ -64,6 +64,105 @@ export function istWeekday(nowUtc: Date): number {
   return new Date(Math.floor(shiftedNowMs / DAY_MS) * DAY_MS).getUTCDay();
 }
 
+/** Minutes-since-IST-midnight -> "HH:MM", for slot labels. */
+function formatHm(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/** IST calendar date ("YYYY-MM-DD") that contains `nowUtc`. */
+export function istDateString(nowUtc: Date): string {
+  const shifted = new Date(nowUtc.getTime() + IST_OFFSET_MS);
+  return shifted.toISOString().slice(0, 10);
+}
+
+/** Weekday (0=Sunday..6=Saturday, Postgres EXTRACT(DOW)) for an IST date string. */
+export function istWeekdayForDate(dateStr: string): number {
+  return new Date(`${dateStr}T00:00:00Z`).getUTCDay();
+}
+
+export type GeneratedSlot = {
+  slotStart: string;
+  slotEnd: string;
+  label: string;
+  available: boolean;
+  /** Why this slot can't be picked -- §7.4 wants disabled slots shown with a reason, not hidden. */
+  unavailableReason: string | null;
+};
+
+/**
+ * Sprint 7: the real `GET /v1/shops/:id/fulfillment-slots` generator §4.6
+ * describes -- a full day's candidate slots for one date, each annotated
+ * with whether it can actually be picked and why not if it can't.
+ *
+ * This is what Sprint 4's `computeNextSlot` (below) was explicitly a
+ * narrower stand-in for: that one answers "the next slot today" for the
+ * Home badge and deliberately knows nothing about blackout dates or any day
+ * but today. Both are kept -- the badge genuinely doesn't need a whole
+ * day's list, and generating one per shop per Home card would be wasteful.
+ *
+ * Deliberately NOT handled, matching what this project actually has:
+ *   * Capacity / booked counts. §4.6 says "if capacity limits are ever
+ *     added" -- they haven't been; no table anywhere counts bookings per
+ *     slot, so nothing here pretends to.
+ *   * Per-shop timezones -- same single-country IST assumption this file's
+ *     header already documents, unchanged.
+ */
+export function generateSlots(
+  dateStr: string,
+  nowUtc: Date,
+  slotWindow: SlotWindow,
+  hours: ShopHoursRow,
+  isBlackout: boolean,
+): GeneratedSlot[] {
+  const windowStartMin = parseHm(slotWindow.start);
+  const windowEndMin = parseHm(slotWindow.end);
+  const slotMinutes = slotWindow.slot_minutes;
+  if (slotMinutes <= 0 || windowEndMin <= windowStartMin) return [];
+
+  // Midnight IST on the requested date, as a real UTC instant.
+  const dayStartUtcMs = Date.parse(`${dateStr}T00:00:00Z`) - IST_OFFSET_MS;
+  const closedReason = isBlackout
+    ? "Shop closed on this date"
+    : !hours || hours.isClosed || !hours.opensAt || !hours.closesAt
+    ? "Shop closed on this day"
+    : null;
+
+  const opensMin = hours?.opensAt ? parseHm(hours.opensAt) : null;
+  const closesMin = hours?.closesAt ? parseHm(hours.closesAt) : null;
+
+  const slots: GeneratedSlot[] = [];
+  for (let startMin = windowStartMin; startMin < windowEndMin; startMin += slotMinutes) {
+    const endMin = startMin + slotMinutes;
+    // A partial slot at the end of the window isn't offered at all -- an
+    // order placed for "10pm-11pm" when the platform grid says 2 hours
+    // would not match rpc_place_order's own duration check (migrations/032).
+    if (endMin > windowEndMin) break;
+
+    const startUtc = new Date(dayStartUtcMs + startMin * 60_000);
+    const endUtc = new Date(dayStartUtcMs + endMin * 60_000);
+
+    let reason: string | null = closedReason;
+    if (!reason && (startMin < opensMin! || endMin > closesMin!)) {
+      reason = "Outside shop hours";
+    }
+    if (!reason && startUtc.getTime() <= nowUtc.getTime()) {
+      reason = "Too late for this slot";
+    }
+
+    slots.push({
+      slotStart: startUtc.toISOString(),
+      slotEnd: endUtc.toISOString(),
+      label: `${formatHm(startMin)} - ${formatHm(endMin)}`,
+      available: reason === null,
+      unavailableReason: reason,
+    });
+  }
+
+  return slots;
+}
+
 /**
  * The shop's current-or-next fulfillment slot today, clipped to its
  * business hours for today's weekday -- or `null` if the shop is closed

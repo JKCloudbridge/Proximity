@@ -1,4 +1,4 @@
-import { boolean, index, integer, jsonb, numeric, pgTable, smallint, text, time, timestamp, unique, uuid } from "npm:drizzle-orm/pg-core";
+import { boolean, date, index, integer, jsonb, numeric, pgTable, smallint, text, time, timestamp, unique, uuid } from "npm:drizzle-orm/pg-core";
 
 // Mirrors migrations/001-020 -- see those files for constraints/comments
 // this schema doesn't repeat (RLS policies, CHECK constraints, extension
@@ -298,6 +298,156 @@ export const cartItems = pgTable(
   },
   (table) => [unique("cart_items_cart_id_variant_id_key").on(table.cartId, table.variantId)],
 );
+
+// Sprint 2 (migrations/013), added to this file in Sprint 7 -- the table has
+// existed since Sprint 2 but deliberately stayed out of here until a route
+// actually touched it (that file's own header said the slot generator would
+// be the one to, "Sprint 7, alongside checkout"). This is that route:
+// routes/checkout.ts's fulfillment-slots handler. `date` is a DATE column,
+// which Drizzle round-trips as a "YYYY-MM-DD" string rather than a JS Date
+// -- which is what the slot generator wants anyway, since every date in
+// that path is an IST calendar date, not an instant.
+export const shopBlackoutDates = pgTable(
+  "shop_blackout_dates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    shopId: uuid("shop_id")
+      .notNull()
+      .references(() => shops.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    reason: text("reason"),
+  },
+  (table) => [unique("shop_blackout_dates_shop_id_date_key").on(table.shopId, table.date)],
+);
+
+// Sprint 7 (migrations/026) -- admin-authored, platform-wide discount
+// codes. Fresh design against prose (§5.2/§11 name the table, §4 never
+// gives its DDL), recovered from Baker Ally's own original -- see that
+// migration's header. `value` semantics depend on `type`; the migration
+// documents them.
+export const discounts = pgTable("discounts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  code: text("code").unique(),
+  name: text("name").notNull(),
+  type: text("type").notNull(),
+  value: integer("value").notNull().default(0),
+  minOrderValue: integer("min_order_value").notNull().default(0),
+  maxUses: integer("max_uses"),
+  usesCount: integer("uses_count").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  startsAt: timestamp("starts_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Sprint 7 (migrations/027) -- §4.8's literal DDL. One row per checkout =
+// one payment = the one amount charged (§1.5). Written only by
+// rpc_place_order (032), never by a bare Drizzle insert.
+export const orderGroups = pgTable("order_groups", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  paymentMode: text("payment_mode").notNull(),
+  paymentGateway: text("payment_gateway"),
+  gatewayOrderId: text("gateway_order_id"),
+  gatewayPaymentId: text("gateway_payment_id").unique(),
+  discountId: uuid("discount_id").references(() => discounts.id),
+  subtotal: integer("subtotal").notNull(),
+  discountValue: integer("discount_value").notNull().default(0),
+  deliveryFeeTotal: integer("delivery_fee_total").notNull().default(0),
+  total: integer("total").notNull(),
+  paymentStatus: text("payment_status").notNull().default("pending"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Sprint 7 (migrations/028) -- §4.8's literal DDL, both CHECK constraints
+// included there (this schema doesn't repeat CHECKs, same as every other
+// table here). One row per shop inside a checkout: own fulfillment, own
+// slot, own status. `platformCommissionPct` is a numeric snapshot, so it
+// comes back as a string through Drizzle -- same note as shops'.
+export const orders = pgTable(
+  "orders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderGroupId: uuid("order_group_id")
+      .notNull()
+      .references(() => orderGroups.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    shopId: uuid("shop_id")
+      .notNull()
+      .references(() => shops.id),
+    fulfillmentType: text("fulfillment_type").notNull(),
+    deliveryFulfilledBy: text("delivery_fulfilled_by"),
+    addressId: uuid("address_id").references(() => addresses.id),
+    slotStart: timestamp("slot_start", { withTimezone: true }).notNull(),
+    slotEnd: timestamp("slot_end", { withTimezone: true }).notNull(),
+    riderId: uuid("rider_id").references(() => riders.id),
+    status: text("status").notNull().default("pending"),
+    subtotal: integer("subtotal").notNull(),
+    discountValue: integer("discount_value").notNull().default(0),
+    deliveryFee: integer("delivery_fee").notNull().default(0),
+    platformCommissionPct: numeric("platform_commission_pct", { precision: 4, scale: 2 }).notNull(),
+    total: integer("total").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_orders_user_created").on(table.userId, table.createdAt),
+    index("idx_orders_shop_created").on(table.shopId, table.createdAt),
+  ],
+);
+
+// Sprint 7 (migrations/029) -- §4.8's literal DDL. §9's immutable
+// order-item snapshot: product_name/variant_name/unit_price are copied at
+// order time, never joined live afterwards.
+export const orderItems = pgTable("order_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orderId: uuid("order_id")
+    .notNull()
+    .references(() => orders.id, { onDelete: "cascade" }),
+  variantId: uuid("variant_id")
+    .notNull()
+    .references(() => productVariants.id),
+  productName: text("product_name").notNull(),
+  variantName: text("variant_name").notNull(),
+  quantity: integer("quantity").notNull(),
+  unitPrice: integer("unit_price").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Sprint 7 (migrations/030) -- §4.8's literal DDL. Append-only; §7.5's
+// live tracking subscribes to it from Sprint 9.
+export const orderStatusHistory = pgTable("order_status_history", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orderId: uuid("order_id")
+    .notNull()
+    .references(() => orders.id, { onDelete: "cascade" }),
+  status: text("status").notNull(),
+  note: text("note"),
+  changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Sprint 7 (migrations/031) -- §4.9's literal DDL. Table only this sprint:
+// nothing writes a row until Sprint 8's rpc_confirm_payment (§11). Added
+// here now anyway, unlike shop_media/shop_blackout_dates which stayed out
+// of this file until a route touched them, because the checkout work is
+// what creates the obligation this table records -- keeping the definition
+// next to orders/order_groups is where a reader will look for it.
+export const shopLedgerEntries = pgTable("shop_ledger_entries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  shopId: uuid("shop_id")
+    .notNull()
+    .references(() => shops.id),
+  orderId: uuid("order_id").references(() => orders.id),
+  entryType: text("entry_type").notNull(),
+  amount: integer("amount").notNull(),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 // Sprint 6 (migrations/025) -- see that file's header for where this
 // table's DDL came from (Baker Ally's recovered v1 original, §9's reuse

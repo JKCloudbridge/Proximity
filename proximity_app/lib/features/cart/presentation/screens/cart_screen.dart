@@ -90,11 +90,18 @@ class _CartBody extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Corrected in Sprint 7: this used to say unavailable items
+                // "won't be counted at checkout," which turned out not to be
+                // true once rpc_place_order existed -- that function refuses
+                // the entire checkout if any line is unavailable
+                // (CART_HAS_UNAVAILABLE_ITEMS, migrations/032) rather than
+                // quietly dropping the bad lines. Telling the buyer to
+                // remove them is the accurate instruction.
                 if (hasBlockedItems)
                   const Padding(
                     padding: EdgeInsets.only(bottom: 8),
                     child: Text(
-                      'Some items are unavailable or out of stock and won\'t be counted at checkout.',
+                      'Remove the unavailable items above to check out.',
                       style: TextStyle(color: AppColors.urgent, fontSize: 12),
                     ),
                   ),
@@ -110,12 +117,18 @@ class _CartBody extends StatelessWidget {
                       ),
                     ),
                     FilledButton(
-                      // Checkout (§7.4) is Sprint 7's job -- same "wired now,
+                      // Real as of Sprint 7 -- this was an honest "arrives in
+                      // Sprint 7" snackbar through Sprint 6, same "wired now,
                       // built later" treatment the PDP's own Add to cart
                       // button got through Sprint 5.
-                      onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Checkout arrives in Sprint 7')),
-                      ),
+                      //
+                      // Blocked while every line in the cart is unavailable:
+                      // rpc_place_order refuses the whole checkout if any
+                      // item has gone inactive/out-of-stock
+                      // (CART_HAS_UNAVAILABLE_ITEMS, migrations/032), so
+                      // sending the buyer to a checkout that cannot succeed
+                      // would just be a slower way to show the same problem.
+                      onPressed: hasBlockedItems ? null : () => context.push('/checkout'),
                       child: const Text('Proceed to checkout'),
                     ),
                   ],

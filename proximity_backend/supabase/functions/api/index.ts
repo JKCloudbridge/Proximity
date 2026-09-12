@@ -12,6 +12,7 @@ import { catalogRoute } from "./routes/catalog.ts";
 import { wishlistRoute } from "./routes/wishlist.ts";
 import { cartRoute } from "./routes/cart.ts";
 import { recommendationsRoute } from "./routes/recommendations.ts";
+import { checkoutRoute } from "./routes/checkout.ts";
 
 // Deployed as one Edge Function (`supabase functions deploy api`), reachable
 // at https://<ref>.supabase.co/functions/v1/api/v1/... -- same shape as
@@ -42,6 +43,7 @@ app.route("/v1", catalogRoute);
 app.route("/v1", wishlistRoute);
 app.route("/v1", cartRoute);
 app.route("/v1", recommendationsRoute);
+app.route("/v1", checkoutRoute);
 
 app.onError((err, c) => {
   console.error(err);

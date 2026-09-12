@@ -52,9 +52,31 @@ cartRoute.get("/cart", async (c) => {
   const productRows = productIds.length ? await db.select().from(products).where(inArray(products.id, productIds)) : [];
   const productById = new Map(productRows.map((p) => [p.id, p]));
 
+  // Sprint 7 widened this select beyond {id,name,logoUrl,status}: the
+  // checkout screen (§7.4 step 1) has to render the right fulfillment
+  // options per shop -- which types it offers, and whether delivery is the
+  // shop's own or a Proximity rider's (§1.3's delivery_mode) -- plus its
+  // min_order_value, which rpc_place_order enforces at placement
+  // (migrations/032) and the buyer deserves to see before getting there.
+  // Added to this existing query rather than fetched per-shop on the
+  // checkout screen: same "one query per joined table, not one per row"
+  // rule this handler already follows, and the cart screen simply ignores
+  // the fields it doesn't use.
   const shopIds = [...new Set(productRows.map((p) => p.shopId))];
   const shopRows = shopIds.length
-    ? await db.select({ id: shops.id, name: shops.name, logoUrl: shops.logoUrl, status: shops.status }).from(shops).where(inArray(shops.id, shopIds))
+    ? await db
+        .select({
+          id: shops.id,
+          name: shops.name,
+          logoUrl: shops.logoUrl,
+          status: shops.status,
+          supportsPickup: shops.supportsPickup,
+          supportsDelivery: shops.supportsDelivery,
+          deliveryMode: shops.deliveryMode,
+          minOrderValue: shops.minOrderValue,
+        })
+        .from(shops)
+        .where(inArray(shops.id, shopIds))
     : [];
   const shopById = new Map(shopRows.map((s) => [s.id, s]));
 
@@ -101,7 +123,17 @@ cartRoute.get("/cart", async (c) => {
             imageUrl: firstImageByProduct.get(product.id) ?? null,
           }
         : null,
-      shop: shop ? { id: shop.id, name: shop.name, logoUrl: shop.logoUrl } : null,
+      shop: shop
+        ? {
+            id: shop.id,
+            name: shop.name,
+            logoUrl: shop.logoUrl,
+            supportsPickup: shop.supportsPickup,
+            supportsDelivery: shop.supportsDelivery,
+            deliveryMode: shop.deliveryMode,
+            minOrderValue: shop.minOrderValue,
+          }
+        : null,
     };
   });
 
