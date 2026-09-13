@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../catalog/data/models/repeat_product.dart';
 import 'models/category.dart';
 import 'models/nearby_shop.dart';
 import 'models/recommended_product.dart';
@@ -40,5 +41,19 @@ class HomeRepository {
     final response = await _dio.get<Map<String, dynamic>>('/v1/recommended', queryParameters: {'lat': lat, 'lng': lng});
     final rows = response.data!['data'] as List<dynamic>;
     return rows.map((e) => RecommendedProduct.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// `GET /v1/home/frequently-bought` (routes/home.ts, Sprint 10) -- §7.1's
+  /// conditional "Frequently Bought at >=3 patterns" section. Authenticated
+  /// only (own-user data); the Home screen simply doesn't call this for a
+  /// guest, same "gated at the specific data need" rule buyerLocationProvider
+  /// already applies for signed-out browsing.
+  Future<({bool qualifies, List<RepeatProduct> products})> getFrequentlyBought() async {
+    final response = await _dio.get<Map<String, dynamic>>('/v1/home/frequently-bought');
+    final data = response.data!['data'] as Map<String, dynamic>;
+    return (
+      qualifies: data['qualifies'] as bool,
+      products: (data['products'] as List<dynamic>).map((e) => RepeatProduct.fromJson(e as Map<String, dynamic>)).toList(),
+    );
   }
 }

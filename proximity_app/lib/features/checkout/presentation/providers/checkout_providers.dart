@@ -14,12 +14,91 @@ final checkoutRepositoryProvider = Provider<CheckoutRepository>((ref) {
   return CheckoutRepository(dio: ref.watch(dioProvider));
 });
 
-/// Sprint 9 -- backs MyOrdersScreen (see that file and GET /v1/order-groups'
-/// own header for scope). `.autoDispose`: only interesting while that screen
-/// is open, re-fetched with a fresh `ref.invalidate` on pull-to-refresh
-/// rather than kept warm in the background.
-final myOrderGroupsProvider = FutureProvider.autoDispose<List<OrderGroupSummary>>((ref) {
-  return ref.watch(checkoutRepositoryProvider).getOrderGroups();
+/// Sprint 9 built a plain `FutureProvider` here for the minimal "My Orders"
+/// list; Sprint 10 replaced it with this paginated `StateNotifier` (same
+/// shape as order_again_providers.dart's `PreviouslyBoughtNotifier`) once
+/// the same route grew real status filtering and cursor pagination -- see
+/// GET /v1/order-groups' own header, and OrderHistoryScreen (formerly
+/// MyOrdersScreen), for the full "extend in place" reasoning.
+class OrderHistoryState {
+  const OrderHistoryState({this.status, this.items = const [], this.loading = false, this.hasMore = true, this.nextCursor, this.error});
+
+  /// null = every order, otherwise 'active' | 'completed' | 'cancelled'.
+  final String? status;
+  final List<OrderGroupSummary> items;
+  final bool loading;
+  final bool hasMore;
+  final String? nextCursor;
+  final Object? error;
+
+  OrderHistoryState copyWith({
+    List<OrderGroupSummary>? items,
+    bool? loading,
+    bool? hasMore,
+    String? nextCursor,
+    Object? error,
+    bool clearError = false,
+  }) {
+    return OrderHistoryState(
+      status: status,
+      items: items ?? this.items,
+      loading: loading ?? this.loading,
+      hasMore: hasMore ?? this.hasMore,
+      nextCursor: nextCursor ?? this.nextCursor,
+      error: clearError ? null : (error ?? this.error),
+    );
+  }
+}
+
+class OrderHistoryNotifier extends StateNotifier<OrderHistoryState> {
+  OrderHistoryNotifier(this._repository, String? status) : super(OrderHistoryState(status: status)) {
+    loadMore();
+  }
+
+  final CheckoutRepository _repository;
+
+  /// A status-filtered page can legitimately come back with zero NEW items
+  /// while `hasMore` is still true (GET /v1/order-groups' own header: the
+  /// filter is applied after an over-fetched batch, so a sparse filter can
+  /// take more than one round-trip to surface anything) -- auto-continues
+  /// fetching in that case, bounded, rather than leaving the list looking
+  /// stuck with nothing new to show and no further scroll event to prompt
+  /// it. A genuinely sparse filter (e.g. very few cancelled orders in a
+  /// long history) may still need more than this bound's worth of rounds;
+  /// the next real scroll-triggered call picks up where this one left off.
+  Future<void> loadMore({int autoContinueBudget = 5}) async {
+    if (state.loading || !state.hasMore) return;
+    state = state.copyWith(loading: true, clearError: true);
+    try {
+      final result = await _repository.getOrderGroups(status: status, cursor: state.nextCursor);
+      final gainedNothing = result.items.isEmpty && result.nextCursor != null;
+      state = state.copyWith(
+        items: [...state.items, ...result.items],
+        loading: false,
+        hasMore: result.nextCursor != null,
+        nextCursor: result.nextCursor,
+      );
+      if (gainedNothing && autoContinueBudget > 0) await loadMore(autoContinueBudget: autoContinueBudget - 1);
+    } catch (e) {
+      state = state.copyWith(loading: false, error: e);
+    }
+  }
+
+  String? get status => state.status;
+
+  Future<void> refresh() async {
+    state = OrderHistoryState(status: state.status);
+    await loadMore();
+  }
+}
+
+/// `.family`-keyed on the status filter (`null` = every order) -- switching
+/// tabs/chips on OrderHistoryScreen just watches a different family member
+/// rather than mutating one notifier's filter in place, so a previously
+/// loaded tab's scroll position/page cache isn't thrown away by visiting
+/// another one.
+final orderHistoryProvider = StateNotifierProvider.autoDispose.family<OrderHistoryNotifier, OrderHistoryState, String?>((ref, status) {
+  return OrderHistoryNotifier(ref.watch(checkoutRepositoryProvider), status);
 });
 
 /// The admin-controlled delivery fee + slot granularity (§4.6/§1.3). Not

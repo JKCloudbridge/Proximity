@@ -52,13 +52,13 @@ class AccountScreen extends ConsumerWidget {
             onTap: () => context.push('/wishlist'),
           ),
           const Divider(height: 1),
-          // Sprint 9 -- §7.5's live tracking needed a way back into an
-          // in-flight order once the confirmation screen isn't the only
-          // path to it anymore (MyOrdersScreen's own header explains why
-          // this is a minimal list, not Sprint 10's full Order History).
+          // Sprint 9 built this as a way back into a live-tracking order
+          // (§7.5); Sprint 10 is the real Order History screen this now
+          // points to (OrderHistoryScreen, formerly the minimal
+          // MyOrdersScreen) -- same route, same entry point, real feature.
           ListTile(
             leading: const Icon(Icons.receipt_long_outlined),
-            title: const Text('My Orders'),
+            title: const Text('Order History'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/orders'),
           ),

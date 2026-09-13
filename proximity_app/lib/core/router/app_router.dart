@@ -13,7 +13,8 @@ import '../../features/cart/presentation/screens/cart_screen.dart';
 import '../../features/checkout/presentation/screens/checkout_screen.dart';
 import '../../features/checkout/presentation/screens/order_confirmation_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
-import '../../features/checkout/presentation/screens/my_orders_screen.dart';
+import '../../features/checkout/presentation/screens/order_history_screen.dart';
+import '../../features/order_again/presentation/screens/order_again_screen.dart';
 import '../../features/product_detail/presentation/screens/product_detail_screen.dart';
 import '../../features/rider/presentation/screens/rider_onboarding_screen.dart';
 import '../../features/shop_detail/presentation/screens/shop_detail_screen.dart';
@@ -84,10 +85,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/order-groups/:id',
         builder: (context, state) => OrderConfirmationScreen(orderGroupId: state.pathParameters['id']!),
       ),
-      // Sprint 9 -- the "reachable later too" entry points this sprint's
-      // live-tracking work needed (see MyOrdersScreen/GET /v1/order-groups'
-      // own headers, and routes/shopOrders.ts's for the shop side).
-      GoRoute(path: '/orders', builder: (context, state) => const MyOrdersScreen()),
+      // Sprint 9 built this as the "reachable later too" entry point
+      // live-tracking needed (see routes/shopOrders.ts's own header for the
+      // shop side); Sprint 10 upgraded the screen it points to from the
+      // minimal MyOrdersScreen into the real OrderHistoryScreen (GET
+      // /v1/order-groups' own header explains why in place, not a new route).
+      GoRoute(path: '/orders', builder: (context, state) => const OrderHistoryScreen()),
       GoRoute(path: '/shop-orders', builder: (context, state) => const ShopOrdersScreen()),
       GoRoute(path: '/shop/:id', builder: (context, state) => ShopDetailScreen(shopId: state.pathParameters['id']!)),
       GoRoute(path: '/product/:id', builder: (context, state) => ProductDetailScreen(productId: state.pathParameters['id']!)),
@@ -97,7 +100,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(routes: [GoRoute(path: '/', builder: (c, s) => const HomeScreen())]),
           StatefulShellBranch(routes: [GoRoute(path: '/categories', builder: (c, s) => const PlaceholderScreen(title: 'Categories'))]),
           StatefulShellBranch(routes: [GoRoute(path: '/cart', builder: (c, s) => const CartScreen())]),
-          StatefulShellBranch(routes: [GoRoute(path: '/order-again', builder: (c, s) => const PlaceholderScreen(title: 'Order Again'))]),
+          StatefulShellBranch(routes: [GoRoute(path: '/order-again', builder: (c, s) => const OrderAgainScreen())]),
         ],
       ),
     ],

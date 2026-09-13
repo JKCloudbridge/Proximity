@@ -9,6 +9,7 @@ import '../../../../core/providers.dart';
 import '../../../addresses/data/location_service.dart';
 import '../../../addresses/presentation/providers/address_providers.dart';
 import '../../../auth/presentation/auth_provider.dart';
+import '../../../catalog/data/models/repeat_product.dart';
 import '../../data/home_repository.dart';
 import '../../data/models/category.dart';
 import '../../data/models/nearby_shop.dart';
@@ -90,4 +91,18 @@ final recommendedProductsProvider = FutureProvider<List<RecommendedProduct>>((re
   final location = await ref.watch(buyerLocationProvider.future);
   if (location == null) return const [];
   return ref.watch(homeRepositoryProvider).getRecommended(lat: location.lat, lng: location.lng);
+});
+
+/// Sprint 10 -- §7.1's third, conditional Home section: "Frequently Bought
+/// at >=3 patterns" (repeatPurchases.ts's own header on the backend defines
+/// exactly what a "qualifying repeat-purchase pattern" means here). Own-user
+/// data with no guest fallback (unlike Recommended-for-you, which
+/// personalizes but still works for guests) -- a guest has no purchase
+/// history to gate on, so this simply isn't fetched at all when signed out,
+/// same "gated at the specific data need" shape buyerLocationProvider
+/// already uses for its own signed-in-only branch.
+final frequentlyBoughtGateProvider = FutureProvider<({bool qualifies, List<RepeatProduct> products})>((ref) async {
+  final auth = ref.watch(authProvider);
+  if (!auth.isLoggedIn) return (qualifies: false, products: const <RepeatProduct>[]);
+  return ref.watch(homeRepositoryProvider).getFrequentlyBought();
 });

@@ -83,13 +83,28 @@ class CheckoutRepository {
     }
   }
 
-  /// Sprint 9 -- the minimal "My Orders" list (see order_group_summary.dart
-  /// and GET /v1/order-groups' own header for exactly why this exists and
-  /// why it's deliberately not Sprint 10's full Order History).
-  Future<List<OrderGroupSummary>> getOrderGroups() async {
-    final response = await _dio.get<Map<String, dynamic>>('/v1/order-groups');
-    return (response.data!['data'] as List)
+  /// Sprint 9 built this as a minimal, unfiltered list; Sprint 10 extended
+  /// it in place with `status`/`cursor` (see order_group_summary.dart and
+  /// GET /v1/order-groups' own header for why "extend," not "replace" or
+  /// "build alongside"). `status` is one of 'active'/'completed'/
+  /// 'cancelled', or omitted for every order. `cursor` is the previous
+  /// page's own `nextCursor` -- `null`/omitted for the first page.
+  Future<({List<OrderGroupSummary> items, String? nextCursor})> getOrderGroups({
+    String? status,
+    String? cursor,
+    int limit = 20,
+  }) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/v1/order-groups',
+      queryParameters: {
+        if (status != null) 'status': status,
+        if (cursor != null) 'cursor': cursor,
+        'limit': limit,
+      },
+    );
+    final items = (response.data!['data'] as List)
         .map((e) => OrderGroupSummary.fromJson(e as Map<String, dynamic>))
         .toList();
+    return (items: items, nextCursor: response.data!['nextCursor'] as String?);
   }
 }

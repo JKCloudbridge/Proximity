@@ -1,7 +1,7 @@
 import { Hono } from "npm:hono";
 import { zValidator } from "npm:@hono/zod-validator";
 import { z } from "npm:zod";
-import { and, desc, eq, inArray, sql } from "npm:drizzle-orm";
+import { and, desc, eq, inArray, lt, sql } from "npm:drizzle-orm";
 
 import { authMiddleware, type AuthEnv } from "../middleware/auth.ts";
 import { db } from "../lib/db.ts";
@@ -310,30 +310,62 @@ checkoutRoute.post("/orders", zValidator("json", placeOrderSchema), async (c) =>
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Sprint 9 -- a minimal list, deliberately NOT §11's own Sprint 10 "Order
-// history / Order Again" feature (that's reorder, filtering, pagination
-// against real usage patterns -- none of that is this sprint's job). This
-// exists for one narrow, load-bearing reason: §7.5's new live-tracking view
-// (the confirmation screen, now Realtime-driven) was, through Sprint 7/8,
-// reachable ONLY as a one-time push straight off a just-completed checkout
-// -- nothing in the app could navigate back to an order placed earlier and
-// then backgrounded/closed. A tracking feature nothing can reach isn't
-// really shipped. So: one flat, unfiltered, most-recent-first list of the
-// buyer's own order_groups (own-user data, §5.2), summarized (NOT
-// loadOrderGroup's full per-item nesting -- this is a list to tap through
-// from, not a detail view) -- tapping a row still lands on the exact same
-// GET /order-groups/:id + Realtime subscription this sprint already built.
-// Real Order History (Sprint 10) can replace or extend this without
-// touching the tracking screen it feeds at all. Registered BEFORE
-// /order-groups/:id, same defensive-but-not-load-bearing ordering
-// shops.ts's own /shops/near-before-/shops/:id comment established in
-// Sprint 5 (Hono's router resolves a static segment over a param one
-// regardless of registration order -- this costs nothing and removes the
-// question for a future reader).
+// Sprint 9 built a minimal, unfiltered version of this for one narrow,
+// load-bearing reason: §7.5's live-tracking view (the confirmation screen)
+// was, through Sprint 7/8, reachable ONLY as a one-time push straight off a
+// just-completed checkout -- nothing could navigate back to an order placed
+// earlier and then backgrounded/closed. Sprint 10 (§11 "Order history")
+// **extends this same route in place** rather than building a second,
+// parallel list endpoint -- decided explicitly, not left as two overlapping
+// surfaces with no stated relationship: the underlying data (the buyer's
+// own order_groups, most-recent-first) was always exactly what a real Order
+// History screen needs too; what it was missing was status filtering and
+// real pagination, both added below as optional query params so Sprint 9's
+// existing callers (none outside this project's own OrderHistoryScreen,
+// formerly MyOrdersScreen) keep working with no params at all. Tapping a
+// row still lands on the exact same GET /order-groups/:id + Realtime
+// subscription Sprint 9 built -- this sprint touches none of that.
+// Registered BEFORE /order-groups/:id, same defensive-but-not-load-bearing
+// ordering shops.ts's own /shops/near-before-/shops/:id comment established
+// in Sprint 5.
 // ---------------------------------------------------------------------------
 
-checkoutRoute.get("/order-groups", async (c) => {
+// Derived, not a column -- §4.8 never gave order_groups its own lifecycle
+// status; each shop's own `orders` row has one. "Active" if ANY shop-order
+// hasn't reached a terminal state yet; "cancelled" only if EVERY shop-order
+// was cancelled; "completed" otherwise (all terminal, at least one actually
+// completed) -- a mixed completed+cancelled multi-shop order reads as
+// "completed" rather than "cancelled," since the buyer did receive at least
+// part of what they paid for.
+const ACTIVE_ORDER_STATUSES = new Set(["pending", "confirmed", "preparing", "ready_for_pickup", "out_for_delivery"]);
+
+function deriveOverallStatus(shopStatuses: string[]): "active" | "completed" | "cancelled" {
+  if (shopStatuses.some((s) => ACTIVE_ORDER_STATUSES.has(s))) return "active";
+  if (shopStatuses.length > 0 && shopStatuses.every((s) => s === "cancelled")) return "cancelled";
+  return "completed";
+}
+
+const orderGroupsQuerySchema = z.object({
+  status: z.enum(["active", "completed", "cancelled"]).optional(),
+  limit: z.coerce.number().int().min(1).max(50).optional(),
+  cursor: z.string().datetime().optional(),
+});
+
+checkoutRoute.get("/order-groups", zValidator("query", orderGroupsQuerySchema), async (c) => {
   const authUser = c.get("user");
+  const { status, limit, cursor } = c.req.valid("query");
+  const pageSize = limit ?? 20;
+
+  // `status` is derived (above), not a SQL column, so it can't be pushed
+  // into the WHERE clause the way a real column could -- this over-fetches
+  // a multiple of the page size and filters in the app layer instead of
+  // building a real materialized status column this MVP doesn't need yet.
+  // Documented trade-off, not an oversight: a status-filtered page can come
+  // back shorter than `limit` (even empty) while more still exist further
+  // back -- the client is expected to keep paging on `nextCursor` until it
+  // has enough or `nextCursor` is null, same "keep paging, don't assume one
+  // batch is the whole answer" shape any keyset-paginated filter needs.
+  const fetchSize = status ? pageSize * 3 : pageSize;
 
   const groups = await db
     .select({
@@ -344,9 +376,9 @@ checkoutRoute.get("/order-groups", async (c) => {
       createdAt: orderGroups.createdAt,
     })
     .from(orderGroups)
-    .where(eq(orderGroups.userId, authUser.id))
+    .where(and(eq(orderGroups.userId, authUser.id), cursor ? lt(orderGroups.createdAt, new Date(cursor)) : undefined))
     .orderBy(desc(orderGroups.createdAt))
-    .limit(50);
+    .limit(fetchSize);
 
   const groupIds = groups.map((g) => g.id);
   const shopStatusRows = groupIds.length
@@ -357,14 +389,41 @@ checkoutRoute.get("/order-groups", async (c) => {
         .where(inArray(orders.orderGroupId, groupIds))
     : [];
 
-  return c.json({
-    data: groups.map((g) => ({
+  const withDerived = groups.map((g) => {
+    const shopRows = shopStatusRows.filter((r) => r.orderGroupId === g.id);
+    return {
       ...g,
-      shops: shopStatusRows
-        .filter((r) => r.orderGroupId === g.id)
-        .map((r) => ({ shopId: r.shopId, shopName: r.shopName, status: r.status })),
-    })),
+      overallStatus: deriveOverallStatus(shopRows.map((r) => r.status)),
+      shops: shopRows.map((r) => ({ shopId: r.shopId, shopName: r.shopName, status: r.status })),
+    };
   });
+
+  const filtered = status ? withDerived.filter((g) => g.overallStatus === status) : withDerived;
+  const page = filtered.slice(0, pageSize);
+
+  // Three cases, in order -- getting this wrong silently drops rows, so
+  // spelled out rather than condensed:
+  let nextCursor: string | null;
+  if (page.length < filtered.length) {
+    // This fetched batch already had more matches than fit on one page --
+    // resume right after the last item actually RETURNED (not the last
+    // item examined), so the next call re-scans and this time returns the
+    // leftover matches still sitting in this same batch, rather than
+    // cursoring past the whole batch and losing them.
+    nextCursor = page[page.length - 1]!.createdAt.toISOString();
+  } else if (groups.length === fetchSize) {
+    // Every match in this batch made it onto the page, but the batch
+    // itself was full -- more order_groups (matching or not) may exist
+    // further back. Safe to resume from the end of the whole examined
+    // batch here, since nothing matching was left behind in it.
+    nextCursor = groups[groups.length - 1]!.createdAt.toISOString();
+  } else {
+    // The raw fetch itself came up short of a full batch -- there is
+    // nothing further back in this buyer's order-group history at all.
+    nextCursor = null;
+  }
+
+  return c.json({ data: page, nextCursor });
 });
 
 // ---------------------------------------------------------------------------
