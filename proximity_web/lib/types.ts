@@ -133,3 +133,71 @@ export type Rider = {
   isVerified: boolean;
   createdAt: string;
 };
+
+// Sprint 12 (routes/admin.ts, routes/shopOrders.ts -- lib/salesSummary.ts/
+// lib/ledger.ts on the backend). `value` shapes mirror
+// migrations/012's own seed-row comment exactly -- see routes/admin.ts's
+// platformSettingSchema, the one place these are validated.
+export type PlatformSettingKey = "platform_rider_delivery_fee" | "slot_window" | "default_shop_commission_pct";
+
+export type PlatformSetting =
+  | { key: "platform_rider_delivery_fee"; value: { amount_paise: number }; updatedBy: string | null; updatedAt: string }
+  | { key: "slot_window"; value: { start: string; end: string; slot_minutes: number }; updatedBy: string | null; updatedAt: string }
+  | { key: "default_shop_commission_pct"; value: { value: number }; updatedBy: string | null; updatedAt: string };
+
+export type DiscountType = "percent" | "flat" | "free_shipping";
+
+export type Discount = {
+  id: string;
+  code: string | null;
+  name: string;
+  type: DiscountType;
+  value: number;
+  minOrderValue: number;
+  maxUses: number | null;
+  usesCount: number;
+  isActive: boolean;
+  startsAt: string | null;
+  expiresAt: string | null;
+  createdBy: string | null;
+  createdAt: string;
+};
+
+// lib/ledger.ts's own balance formula, mirrored here -- net of any
+// migrations/046 reversal rows already.
+export type ShopLedgerBalance = {
+  shopId: string;
+  netPayoutDuePaise: number;
+  netCommissionDuePaise: number;
+};
+
+export type PlatformLedgerRow = ShopLedgerBalance & { shopName: string };
+
+export type LedgerEntryType = "payout_due" | "commission_due" | "payout_reversal" | "commission_reversal";
+
+export type LedgerEntry = {
+  id: string;
+  shopId: string;
+  orderId: string | null;
+  entryType: LedgerEntryType;
+  amount: number;
+  status: "pending" | "settled";
+  reversesEntryId: string | null;
+  createdAt: string;
+};
+
+export type DailySalesPoint = { date: string; orderCount: number; revenuePaise: number };
+
+export type ShopSalesSummary = {
+  rangeDays: number;
+  orderCount: number;
+  cancelledOrderCount: number;
+  grossRevenuePaise: number;
+  commissionOwedPaise: number;
+  averageOrderValuePaise: number;
+  daily: DailySalesPoint[];
+};
+
+export type PlatformSalesSummary = ShopSalesSummary & {
+  byShop: { shopId: string; shopName: string; orderCount: number; grossRevenuePaise: number }[];
+};

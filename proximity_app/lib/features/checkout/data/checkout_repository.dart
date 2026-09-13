@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../../shared/errors/cancel_order_exception.dart';
 import 'models/checkout_config.dart';
 import 'models/fulfillment_slot.dart';
 import 'models/order_group.dart';
@@ -106,5 +107,32 @@ class CheckoutRepository {
         .map((e) => OrderGroupSummary.fromJson(e as Map<String, dynamic>))
         .toList();
     return (items: items, nextCursor: response.data!['nextCursor'] as String?);
+  }
+
+  /// Sprint 12 -- buyer-initiated cancellation (rpc_cancel_order,
+  /// migrations/047, via POST /v1/orders/:orderId/cancel). Per-`orders` row,
+  /// not per-`order_groups` -- see routes/checkout.ts's own comment on that
+  /// route for why (§4.8's own per-shop-status redesign). Throws
+  /// `CancelOrderException` with the backend's own typed error code/message
+  /// on failure (the buyer cancel window closed, already dispatched, etc.)
+  /// rather than a bare DioException -- same "map the typed error at the
+  /// repository boundary" shape `attempt_online_payment.dart`'s own error
+  /// handling already established.
+  Future<void> cancelOrder(String orderId, {String? reason}) async {
+    try {
+      await _dio.post<Map<String, dynamic>>(
+        '/v1/orders/$orderId/cancel',
+        data: {if (reason != null && reason.isNotEmpty) 'reason': reason},
+      );
+    } on DioException catch (err) {
+      final data = err.response?.data;
+      // Parenthesized deliberately -- a bare `?[...]` null-aware-index chain
+      // immediately as a ternary's true-branch is a real Dart syntax error
+      // in this project's SDK (Sprint 7's own `_addToCart` bug, see that
+      // sprint's write-up), not a style choice.
+      final code = data is Map ? (data['error']?['code'] as String?) : null;
+      final message = data is Map ? (data['error']?['message'] as String?) : null;
+      throw CancelOrderException(code ?? 'UNKNOWN', message ?? 'Could not cancel this order');
+    }
   }
 }

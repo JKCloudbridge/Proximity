@@ -14,6 +14,7 @@ import {
   type SlotWindow,
 } from "../lib/slots.ts";
 import { confirmPaymentAndGenerateInvoices, loadOrderGroup } from "../lib/orderConfirmation.ts";
+import { cancelOrder, CANCEL_ORDER_ERRORS } from "../lib/cancellation.ts";
 
 // Sprint 7 (§7.4's checkout flow, §4.6's slot endpoint, §5.4's
 // rpc_place_order). Everything that actually *writes* an order goes through
@@ -440,4 +441,39 @@ checkoutRoute.get("/order-groups/:id", async (c) => {
   const data = await loadOrderGroup(c.req.param("id"), authUser.id);
   if (!data) return c.json({ error: { code: "ORDER_NOT_FOUND", message: "Order not found" } }, 404);
   return c.json({ data });
+});
+
+// ---------------------------------------------------------------------------
+// Sprint 12 -- buyer-initiated cancellation (rpc_cancel_order, migrations/047,
+// via lib/cancellation.ts). Deliberately per-`orders` row (this shop's own
+// sub-order), not per-`order_groups` -- §4.8's own redesign never gave a
+// combined checkout a single shared lifecycle (each shop's order already has
+// its own independent `status`), so "cancel this order" was always going to
+// mean "cancel one shop's sub-order," the same "a group is one orders row"
+// precedent Sprint 10's Order Again feature already established for this
+// exact multi-shop-cart data shape. A buyer with a two-shop checkout who
+// wants out of both taps cancel twice, once per shop's card on the
+// confirmation/tracking screen -- never a bulk "cancel this whole order
+// group" action this schema has no single status column to represent.
+// ---------------------------------------------------------------------------
+
+const cancelOrderSchema = z.object({ reason: z.string().max(300).optional() });
+
+checkoutRoute.post("/orders/:orderId/cancel", zValidator("json", cancelOrderSchema), async (c) => {
+  const authUser = c.get("user");
+  const orderId = c.req.param("orderId");
+  const { reason } = c.req.valid("json");
+
+  try {
+    const result = await cancelOrder(orderId, "buyer", authUser.id, reason);
+    return c.json({ data: result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    for (const [code, mapped] of Object.entries(CANCEL_ORDER_ERRORS)) {
+      if (message.includes(code)) {
+        return c.json({ error: { code, message: mapped.message } }, mapped.status);
+      }
+    }
+    throw err;
+  }
 });

@@ -22,6 +22,11 @@ export function ShopsClient({ initialShops }: { initialShops: Shop[] }) {
   const [shops, setShops] = useState(initialShops);
   const [loading, setLoading] = useState(false);
   const [actingOn, setActingOn] = useState<string | null>(null);
+  // Sprint 12 -- §11's Sprint 12 entry: "per-shop platform_commission_pct
+  // override." Draft values keyed by shop id so editing one shop's field
+  // doesn't touch any other row's input state.
+  const [commissionDrafts, setCommissionDrafts] = useState<Record<string, string>>({});
+  const [savingCommission, setSavingCommission] = useState<string | null>(null);
 
   async function loadTab(next: ShopStatus | "all") {
     setTab(next);
@@ -47,6 +52,34 @@ export function ShopsClient({ initialShops }: { initialShops: Shop[] }) {
       toast.error(err instanceof ApiError ? err.message : "Action failed");
     } finally {
       setActingOn(null);
+    }
+  }
+
+  async function saveCommission(shopId: string) {
+    const draft = commissionDrafts[shopId];
+    if (draft === undefined || draft === "") return;
+    const platformCommissionPct = Number(draft);
+    if (Number.isNaN(platformCommissionPct) || platformCommissionPct < 0 || platformCommissionPct > 99.99) {
+      toast.error("Commission must be between 0 and 99.99");
+      return;
+    }
+    setSavingCommission(shopId);
+    try {
+      const { data } = await apiFetchClient<{ data: Shop }>(`/v1/admin/shops/${shopId}/commission`, {
+        method: "PATCH",
+        body: JSON.stringify({ platformCommissionPct }),
+      });
+      setShops((prev) => prev.map((s) => (s.id === shopId ? data : s)));
+      setCommissionDrafts((prev) => {
+        const next = { ...prev };
+        delete next[shopId];
+        return next;
+      });
+      toast.success("Commission updated");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not update commission");
+    } finally {
+      setSavingCommission(null);
     }
   }
 
@@ -79,6 +112,7 @@ export function ShopsClient({ initialShops }: { initialShops: Shop[] }) {
                 <th className="px-4 py-2 font-medium">Shop</th>
                 <th className="px-4 py-2 font-medium">Location</th>
                 <th className="px-4 py-2 font-medium">Delivery mode</th>
+                <th className="px-4 py-2 font-medium">Commission %</th>
                 <th className="px-4 py-2 font-medium">Status</th>
                 <th className="px-4 py-2 font-medium" />
               </tr>
@@ -89,6 +123,24 @@ export function ShopsClient({ initialShops }: { initialShops: Shop[] }) {
                   <td className="px-4 py-2 font-medium">{shop.name}</td>
                   <td className="px-4 py-2">{shop.city}</td>
                   <td className="px-4 py-2 capitalize">{shop.deliveryMode}</td>
+                  <td className="px-4 py-2">
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="99.99"
+                        step="0.01"
+                        className="w-16 rounded border border-input bg-background px-1.5 py-0.5 text-sm"
+                        value={commissionDrafts[shop.id] ?? shop.platformCommissionPct}
+                        onChange={(e) => setCommissionDrafts((prev) => ({ ...prev, [shop.id]: e.target.value }))}
+                      />
+                      {commissionDrafts[shop.id] !== undefined && commissionDrafts[shop.id] !== shop.platformCommissionPct && (
+                        <Button size="sm" variant="outline" disabled={savingCommission === shop.id} onClick={() => saveCommission(shop.id)}>
+                          Save
+                        </Button>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-4 py-2">
                     <Badge variant={STATUS_VARIANT[shop.status]} className="capitalize">
                       {shop.status}

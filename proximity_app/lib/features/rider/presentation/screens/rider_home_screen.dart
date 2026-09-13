@@ -152,6 +152,26 @@ class _RiderOrderCardState extends ConsumerState<_RiderOrderCard> {
 
   Future<void> _advance(String status) => _run(() => ref.read(riderRepositoryProvider).updateOrderStatus(widget.order.id, status));
 
+  /// Sprint 12 -- the other half of §8.5's "Accept" (rpc_rider_decline_order,
+  /// migrations/048). A confirmation dialog, same bar every other
+  /// consequential action in this app uses -- declining immediately frees
+  /// this rider and tries to hand the order to someone else server-side.
+  Future<void> _decline() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Decline this delivery?'),
+        content: const Text("We'll try to find another rider for it right away."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Keep it')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Decline')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _run(() => ref.read(riderRepositoryProvider).declineOrder(widget.order.id));
+  }
+
   Future<void> _run(Future<void> Function() action) async {
     setState(() => _busy = true);
     try {
@@ -195,9 +215,17 @@ class _RiderOrderCardState extends ConsumerState<_RiderOrderCard> {
     }
 
     // §8.5's ladder, gated on riderLadderStep (not `status` alone -- see
-    // rider_order.dart's own comment on why).
+    // rider_order.dart's own comment on why). Decline (Sprint 12) is only
+    // offered here, before Accept -- rpc_rider_decline_order itself refuses
+    // it past that point (migrations/048's own header).
     if (order.riderLadderStep == null) {
-      return FilledButton(onPressed: _accept, child: const Text('Accept'));
+      return Row(
+        children: [
+          Expanded(child: FilledButton(onPressed: _accept, child: const Text('Accept'))),
+          const SizedBox(width: 8),
+          OutlinedButton(onPressed: _decline, child: const Text('Decline')),
+        ],
+      );
     }
     if (order.riderLadderStep == 'rider_accepted') {
       if (order.status != 'ready_for_pickup') {

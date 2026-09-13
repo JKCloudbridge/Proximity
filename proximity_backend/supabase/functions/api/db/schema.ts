@@ -443,6 +443,14 @@ export const orderStatusHistory = pgTable("order_status_history", {
 // of this file until a route touched them, because the checkout work is
 // what creates the obligation this table records -- keeping the definition
 // next to orders/order_groups is where a reader will look for it.
+//
+// Sprint 12 (migrations/046) -- `reversesEntryId` added for cancellation
+// ledger reversal: a nullable self-reference, set only on a
+// 'payout_reversal'/'commission_reversal' row, naming exactly which
+// original 'payout_due'/'commission_due' row it cancels. See that
+// migration's own header for the full "new offsetting row, never a status
+// mutation on the original" design decision -- lib/ledger.ts is the one
+// place that sums these back into a net balance.
 export const shopLedgerEntries = pgTable("shop_ledger_entries", {
   id: uuid("id").primaryKey().defaultRandom(),
   shopId: uuid("shop_id")
@@ -452,6 +460,7 @@ export const shopLedgerEntries = pgTable("shop_ledger_entries", {
   entryType: text("entry_type").notNull(),
   amount: integer("amount").notNull(),
   status: text("status").notNull().default("pending"),
+  reversesEntryId: uuid("reverses_entry_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -559,4 +568,25 @@ export const recurringListItems = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [unique("recurring_list_items_recurring_list_id_variant_id_key").on(table.recurringListId, table.variantId)],
+);
+
+// Sprint 12 (migrations/048) -- see that file's header for the full rider
+// decline/reassignment design. Written only by rpc_rider_decline_order and
+// rpc_expire_stale_rider_assignments (both migrations/048-049), read by
+// lib/riderAssignment.ts to build rpc_assign_rider's own exclusion list on
+// a reassignment attempt -- never a plain client-facing CRUD surface.
+export const orderRiderDeclines = pgTable(
+  "order_rider_declines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    riderId: uuid("rider_id")
+      .notNull()
+      .references(() => riders.id, { onDelete: "cascade" }),
+    reason: text("reason"),
+    declinedAt: timestamp("declined_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("order_rider_declines_order_id_rider_id_key").on(table.orderId, table.riderId)],
 );
