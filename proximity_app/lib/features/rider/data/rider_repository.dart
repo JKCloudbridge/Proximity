@@ -86,4 +86,17 @@ class RiderRepository {
     assert(status == 'picked_up' || status == 'out_for_delivery' || status == 'delivered');
     return _dio.post('/v1/rider/riders/me/orders/$orderId/status', data: {'status': status});
   }
+
+  /// Sprint 12 -- the other half of §8.5's "Accept," made real
+  /// (rpc_rider_decline_order, migrations/048). Only legal before Accept --
+  /// see that migration's own header for the full design and why a
+  /// post-accept "I can't do this" goes through the shop instead. Always
+  /// sends an explicit JSON body (even empty) -- routes/riders.ts's own
+  /// zValidator on this route requires one.
+  Future<void> declineOrder(String orderId, {String? reason}) {
+    return _dio.post(
+      '/v1/rider/riders/me/orders/$orderId/decline',
+      data: {if (reason != null && reason.isNotEmpty) 'reason': reason},
+    );
+  }
 }

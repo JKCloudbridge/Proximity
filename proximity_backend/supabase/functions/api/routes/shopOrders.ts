@@ -7,7 +7,10 @@ import { authMiddleware, type AuthEnv } from "../middleware/auth.ts";
 import { db } from "../lib/db.ts";
 import { orderItems, orders } from "../db/schema.ts";
 import { isShopMember, isShopWriter } from "../lib/shopAccess.ts";
-import { assignRider } from "../lib/riderAssignment.ts";
+import { assignRider, forceReassignRider, OrderNotReassignableError } from "../lib/riderAssignment.ts";
+import { cancelOrder, CANCEL_ORDER_ERRORS } from "../lib/cancellation.ts";
+import { getShopSalesSummary } from "../lib/salesSummary.ts";
+import { getShopLedgerBalance, listLedgerEntries } from "../lib/ledger.ts";
 
 // Sprint 9 -- §8.3's "Order list scoped to their own shop," now with a real
 // backend surface for the first time (Sprint 3-8 all deferred this: nothing
@@ -155,14 +158,33 @@ const ASSIGN_RIDER_ERRORS: Record<string, { status: 400 | 403 | 404 | 409 | 503;
   ORDER_NOT_FOUND: { status: 404, message: "Order not found" },
   NOT_PLATFORM_RIDER_ORDER: { status: 400, message: "This order isn't fulfilled by a Proximity rider" },
   ORDER_NOT_ASSIGNABLE: { status: 409, message: "This order is already completed or cancelled" },
+  // Sprint 12 -- thrown by forceReassignRider (lib/riderAssignment.ts) when
+  // `force: true` is used on an order past the point a reassignment could
+  // ever help (already out for delivery, completed, or cancelled).
+  ORDER_NOT_REASSIGNABLE: { status: 409, message: "This order can no longer be reassigned" },
   SHOP_LOCATION_MISSING: { status: 409, message: "This shop has no location set" },
   NO_RIDER_AVAILABLE: { status: 503, message: "No riders are available nearby right now -- try again shortly" },
 };
 
-shopOrdersRoute.post("/shop/shops/:shopId/orders/:orderId/assign-rider", async (c) => {
+// Sprint 12 addition: `force` (optional, default false) lets this same route
+// also cover the "current rider is unreachable mid-delivery" case
+// (migrations/048's own header names this explicitly as the one gap this
+// project does NOT auto-detect) -- without `force`, this route keeps its
+// original Sprint 9 behavior exactly (idempotent no-op on an
+// already-assigned order, via assignRider's own guard). With `force: true`
+// on an order that already has a rider, the current rider is released and a
+// fresh search runs, excluding nobody (a manually-forced reassignment isn't
+// a decline -- the rider being replaced didn't refuse anything, so they
+// stay eligible for a different order right away, and there's no reason to
+// permanently exclude them from ever being reassigned to this one either if
+// they were the only option).
+const assignRiderBodySchema = z.object({ force: z.boolean().optional() });
+
+shopOrdersRoute.post("/shop/shops/:shopId/orders/:orderId/assign-rider", zValidator("json", assignRiderBodySchema), async (c) => {
   const authUser = c.get("user");
   const shopId = c.req.param("shopId");
   const orderId = c.req.param("orderId");
+  const { force } = c.req.valid("json");
 
   if (!(await isShopWriter(authUser.id, shopId))) {
     return c.json({ error: { code: "NOT_SHOP_WRITER", message: "Only the shop owner or staff can do this" } }, 403);
@@ -174,9 +196,13 @@ shopOrdersRoute.post("/shop/shops/:shopId/orders/:orderId/assign-rider", async (
   }
 
   try {
-    const result = await assignRider(orderId);
+    const result = force ? await forceReassignRider(orderId) : await assignRider(orderId);
     return c.json({ data: result });
   } catch (err) {
+    if (err instanceof OrderNotReassignableError) {
+      const mapped = ASSIGN_RIDER_ERRORS[err.code] ?? { status: 409 as const, message: "This order can't be reassigned right now" };
+      return c.json({ error: { code: err.code, message: mapped.message } }, mapped.status);
+    }
     const message = err instanceof Error ? err.message : String(err);
     for (const [code, mapped] of Object.entries(ASSIGN_RIDER_ERRORS)) {
       if (message.includes(code)) {
@@ -185,4 +211,93 @@ shopOrdersRoute.post("/shop/shops/:shopId/orders/:orderId/assign-rider", async (
     }
     throw err;
   }
+});
+
+// ---------------------------------------------------------------------------
+// Sprint 12 -- shop-initiated cancellation (rpc_cancel_order, migrations/047,
+// via lib/cancellation.ts). Owner/staff only, same tier as the manual
+// rider-assignment retry above -- see that migration's header for the full
+// state-machine/ledger-reversal/rider-release design this one RPC call
+// performs atomically.
+// ---------------------------------------------------------------------------
+
+const cancelOrderSchema = z.object({ reason: z.string().max(300).optional() });
+
+shopOrdersRoute.post(
+  "/shop/shops/:shopId/orders/:orderId/cancel",
+  zValidator("json", cancelOrderSchema),
+  async (c) => {
+    const authUser = c.get("user");
+    const shopId = c.req.param("shopId");
+    const orderId = c.req.param("orderId");
+    const { reason } = c.req.valid("json");
+
+    const [order] = await db.select({ shopId: orders.shopId }).from(orders).where(eq(orders.id, orderId)).limit(1);
+    if (!order || order.shopId !== shopId) {
+      return c.json({ error: { code: "ORDER_NOT_FOUND", message: "Order not found" } }, 404);
+    }
+
+    try {
+      const result = await cancelOrder(orderId, "shop", authUser.id, reason);
+      return c.json({ data: result });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      for (const [code, mapped] of Object.entries(CANCEL_ORDER_ERRORS)) {
+        if (message.includes(code)) {
+          return c.json({ error: { code, message: mapped.message } }, mapped.status);
+        }
+      }
+      throw err;
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Sprint 12 -- §8.4's sales summary + ledger view, on the shopkeeper's own
+// dashboard side. Owner/staff only (§5.3: "View sales summary / ledger /
+// invoices" excludes `delivery`) -- same gate isShopWriter already provides
+// for catalog writes, reused here for a read for the first time (§5.3's
+// table names it read-only for owner/staff, which isShopWriter's own name
+// doesn't advertise but its actual role-set match is exactly right).
+// ---------------------------------------------------------------------------
+
+const salesSummaryQuerySchema = z.object({ days: z.coerce.number().int().min(1).max(365).optional() });
+
+shopOrdersRoute.get(
+  "/shop/shops/:shopId/analytics/sales-summary",
+  zValidator("query", salesSummaryQuerySchema),
+  async (c) => {
+    const authUser = c.get("user");
+    const shopId = c.req.param("shopId");
+    const { days } = c.req.valid("query");
+
+    if (!(await isShopWriter(authUser.id, shopId))) {
+      return c.json({ error: { code: "NOT_SHOP_WRITER", message: "Only the shop owner or staff can view this" } }, 403);
+    }
+
+    const summary = await getShopSalesSummary(shopId, days ?? 30);
+    return c.json({ data: summary });
+  },
+);
+
+const ledgerQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+
+shopOrdersRoute.get("/shop/shops/:shopId/ledger", zValidator("query", ledgerQuerySchema), async (c) => {
+  const authUser = c.get("user");
+  const shopId = c.req.param("shopId");
+  const { limit, offset } = c.req.valid("query");
+
+  if (!(await isShopWriter(authUser.id, shopId))) {
+    return c.json({ error: { code: "NOT_SHOP_WRITER", message: "Only the shop owner or staff can view this" } }, 403);
+  }
+
+  const [balance, entries] = await Promise.all([
+    getShopLedgerBalance(shopId),
+    listLedgerEntries({ shopId, limit: limit ?? 50, offset: offset ?? 0 }),
+  ]);
+
+  return c.json({ data: { balance, entries } });
 });

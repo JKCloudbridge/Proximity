@@ -5,11 +5,21 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/realtime/order_status_channel.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/errors/cancel_order_exception.dart';
 import '../../../../shared/utils/currency.dart';
 import '../../../payments/presentation/attempt_online_payment.dart';
 import '../../../payments/presentation/providers/payment_providers.dart';
 import '../../data/models/order_group.dart';
 import '../providers/checkout_providers.dart';
+
+/// Sprint 12 -- rpc_cancel_order's own buyer-window gate (migrations/047):
+/// legal only while this shop's own order is still 'pending' or 'confirmed'
+/// -- once a shop moves it to 'preparing' they've started real work and the
+/// buyer can no longer self-cancel. Mirrored here purely to decide whether
+/// to show the button at all; the RPC is the actual authority (a race where
+/// the shop advances status between this check and the tap still gets a
+/// clean, typed BUYER_CANCEL_WINDOW_CLOSED error, not a crash).
+bool _buyerCanCancel(String status) => status == 'pending' || status == 'confirmed';
 
 final orderGroupProvider = FutureProvider.autoDispose.family<OrderGroup?, String>((ref, id) {
   return ref.watch(checkoutRepositoryProvider).getOrderGroup(id);
@@ -228,6 +238,40 @@ class _OrderCard extends ConsumerWidget {
     }
   }
 
+  /// Sprint 12 -- buyer-initiated cancellation. One confirmation dialog
+  /// (this is money/a real order, not a wishlist toggle -- same "a bulk
+  /// section-level action is more consequential" reasoning the cart
+  /// screen's own "Remove all from this shop" confirmation gave in Sprint
+  /// 6), then the real call. `orderGroupProvider` is invalidated on success
+  /// so the card's own status chip and the confirmation screen's per-shop
+  /// section reflect 'cancelled' immediately, same refetch-after-mutation
+  /// convention every other write in this app follows.
+  Future<void> _cancelOrder(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cancel this order?'),
+        content: Text("This will cancel your order from ${order.shopName}. This can't be undone."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Keep order')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Cancel order')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await ref.read(checkoutRepositoryProvider).cancelOrder(order.id);
+      ref.invalidate(orderGroupProvider);
+      if (context.mounted) {
+        messenger.showSnackBar(const SnackBar(content: Text('Order cancelled.')));
+      }
+    } on CancelOrderException catch (err) {
+      if (context.mounted) messenger.showSnackBar(SnackBar(content: Text(err.message)));
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final textTheme = Theme.of(context).textTheme;
@@ -313,6 +357,23 @@ class _OrderCard extends ConsumerWidget {
                 onPressed: () => _viewInvoice(context, ref),
                 icon: const Icon(Icons.receipt_long_outlined, size: 16),
                 label: const Text('View invoice'),
+              ),
+            ),
+          ],
+          // Sprint 12 -- §11's Sprint 12 entry: "a real cancellation flow --
+          // buyer-initiated (before a shop accepts)." Shown only inside the
+          // RPC's own legal window (_buyerCanCancel) -- past that, the
+          // button simply isn't there rather than being shown-then-refused,
+          // same "gray it out / hide it" discipline this screen already
+          // applies to the invoice link above.
+          if (_buyerCanCancel(order.status)) ...[
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => _cancelOrder(context, ref),
+                icon: const Icon(Icons.cancel_outlined, size: 16, color: AppColors.urgent),
+                label: const Text('Cancel order', style: TextStyle(color: AppColors.urgent)),
               ),
             ),
           ],

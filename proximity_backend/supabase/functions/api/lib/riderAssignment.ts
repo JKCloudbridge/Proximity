@@ -84,3 +84,51 @@ export async function assignRider(orderId: string): Promise<RiderAssignment> {
 
   return assignment;
 }
+
+// Sprint 12 -- §8.5's decline/timeout/reassignment gap (migrations/048's own
+// header has the full design). Both the rider-initiated decline
+// (routes/riders.ts's own new POST .../decline) and the system-initiated
+// timeout (migrations/049's cron job) already do their own reassignment
+// attempt entirely in SQL (rpc_rider_decline_order/
+// rpc_expire_stale_rider_assignments both call rpc_assign_rider directly) --
+// this function is NOT part of that path. It exists for the other half of
+// migrations/048's design: the shop's own manual "this rider isn't
+// responding, find someone else" action, which -- unlike a decline or a
+// timeout -- can fire on an order whose rider HAS already accepted, as long
+// as they haven't picked up yet (status still 'ready_for_pickup' -- see the
+// guard below and migrations/048's header for why 'out_for_delivery' is
+// refused outright: reassigning can't help once a different rider already
+// physically holds the order). Releases the current rider (if any) back to
+// 'available', clears the order's own rider_id, then delegates to
+// assignRider() above for the actual search (and its own push
+// notification) -- one implementation for "go find this order a rider,"
+// not two.
+export class OrderNotReassignableError extends Error {
+  constructor(public code: string) {
+    super(code);
+    this.name = "OrderNotReassignableError";
+  }
+}
+
+export async function forceReassignRider(orderId: string): Promise<RiderAssignment> {
+  const orderRows = (await db.execute(
+    sql`SELECT status, delivery_fulfilled_by, rider_id FROM orders WHERE id = ${orderId}::uuid`,
+  )) as unknown as { status: string; delivery_fulfilled_by: string | null; rider_id: string | null }[];
+  const order = orderRows[0];
+
+  if (!order) throw new OrderNotReassignableError("ORDER_NOT_FOUND");
+  if (order.delivery_fulfilled_by !== "platform_rider") throw new OrderNotReassignableError("NOT_PLATFORM_RIDER_ORDER");
+  if (["completed", "cancelled", "out_for_delivery"].includes(order.status)) {
+    throw new OrderNotReassignableError("ORDER_NOT_REASSIGNABLE");
+  }
+
+  if (order.rider_id) {
+    await db.execute(sql`UPDATE riders SET status = 'available' WHERE id = ${order.rider_id}::uuid AND status = 'on_delivery'`);
+    await db.execute(sql`UPDATE orders SET rider_id = NULL, updated_at = now() WHERE id = ${orderId}::uuid`);
+    await db.execute(
+      sql`INSERT INTO order_status_history (order_id, status, note) VALUES (${orderId}::uuid, 'rider_reassignment_forced', 'Shop requested a different rider')`,
+    );
+  }
+
+  return assignRider(orderId);
+}

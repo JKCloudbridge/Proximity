@@ -2,10 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/errors/cancel_order_exception.dart';
 import '../../../../shared/utils/currency.dart';
 import '../../data/models/my_shop.dart';
 import '../../data/models/shop_order.dart';
 import '../providers/shop_orders_providers.dart';
+
+/// Sprint 12 -- rpc_cancel_order's own shop-window gate (migrations/047):
+/// legal for a shop up to and including 'ready_for_pickup', refused once
+/// 'out_for_delivery' (dispatched) or 'completed'. Mirrored here purely to
+/// decide whether to show the button; the RPC is the real authority.
+bool _shopCanCancel(String status) =>
+    status == 'pending' || status == 'confirmed' || status == 'preparing' || status == 'ready_for_pickup';
 
 /// Sprint 9 -- the shop-side status-advance touchpoint (§5.4's
 /// rpc_shop_advance_order_status, brought into this sprint's scope
@@ -116,11 +124,40 @@ class _ShopOrderCardState extends ConsumerState<_ShopOrderCard> {
 
   Future<void> _assignRider() => _run(() => ref.read(shopOrdersRepositoryProvider).assignRider(widget.shopId, widget.order.id));
 
+  /// Sprint 12 -- migrations/048's manual escape hatch: "this rider isn't
+  /// responding, find someone else," legal only up to (not including)
+  /// 'out_for_delivery' -- see that migration's own header for exactly why.
+  Future<void> _reassignRider() =>
+      _run(() => ref.read(shopOrdersRepositoryProvider).assignRider(widget.shopId, widget.order.id, force: true));
+
+  /// Sprint 12 -- shop-initiated cancellation (rpc_cancel_order,
+  /// migrations/047). One confirmation dialog -- a real order, real
+  /// ledger-reversal/rider-release consequences, same "consequential bulk
+  /// action deserves a confirmation" bar the buyer-side cancel button uses
+  /// (order_confirmation_screen.dart).
+  Future<void> _cancelOrder() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cancel this order?'),
+        content: const Text("This can't be undone. Any ledger obligation on this order will be reversed automatically."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Keep order')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Cancel order')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _run(() => ref.read(shopOrdersRepositoryProvider).cancelOrder(widget.shopId, widget.order.id));
+  }
+
   Future<void> _run(Future<void> Function() action) async {
     setState(() => _busy = true);
     try {
       await action();
       ref.invalidate(shopOrdersProvider(widget.shopId));
+    } on CancelOrderException catch (err) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err.message)));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update: $e')));
     } finally {
@@ -159,7 +196,21 @@ class _ShopOrderCardState extends ConsumerState<_ShopOrderCard> {
           if (_busy)
             const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
           else
-            _actions(),
+            Row(
+              children: [
+                Expanded(child: _actions()),
+                // Sprint 12 -- shown whenever this order is still legally
+                // cancellable, alongside whatever the ladder's own primary
+                // action is (never replacing it) -- cancelling and advancing
+                // are independent choices right up until dispatch.
+                if (_shopCanCancel(widget.order.status))
+                  IconButton(
+                    tooltip: 'Cancel order',
+                    onPressed: _cancelOrder,
+                    icon: const Icon(Icons.cancel_outlined, color: AppColors.urgent),
+                  ),
+              ],
+            ),
         ],
       ),
     );
@@ -185,7 +236,19 @@ class _ShopOrderCardState extends ConsumerState<_ShopOrderCard> {
       if (order.riderId == null) {
         return FilledButton.tonal(onPressed: _assignRider, child: const Text('Assign a rider'));
       }
-      return Text('A rider is on the way to collect this', style: TextStyle(color: AppColors.inkSoft, fontSize: 12.5));
+      // Sprint 12 -- migrations/048's manual "this rider isn't responding"
+      // escape hatch, only offered pre-pickup (this branch is
+      // 'ready_for_pickup' by construction) -- see forceReassignRider's own
+      // header for why it can't help once 'out_for_delivery'.
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Expanded(
+            child: Text('A rider is on the way to collect this', style: TextStyle(color: AppColors.inkSoft, fontSize: 12.5)),
+          ),
+          TextButton(onPressed: _reassignRider, child: const Text('Find a different rider')),
+        ],
+      );
     }
     if (order.status == 'out_for_delivery' && order.deliveryFulfilledBy == 'shop') {
       return FilledButton(onPressed: () => _advance('completed'), child: const Text('Mark delivered'));

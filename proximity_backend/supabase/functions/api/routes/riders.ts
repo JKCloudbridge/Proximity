@@ -266,3 +266,46 @@ ridersRoute.post(
     }
   },
 );
+
+// ---------------------------------------------------------------------------
+// Sprint 12 -- Decline (rpc_rider_decline_order, migrations/048). §8.5 only
+// ever built Accept; this is the other half. Only legal before the rider has
+// accepted (ALREADY_ACCEPTED_CANNOT_DECLINE below) -- see that migration's
+// own header for the full decline/timeout/reassignment design and why a
+// post-accept "I can't do this anymore" is handled by the shop's own manual
+// reassign action instead, not this route.
+// ---------------------------------------------------------------------------
+
+const declineOrderSchema = z.object({ reason: z.string().max(300).optional() });
+
+const RIDER_DECLINE_ERRORS: Record<string, { status: 403 | 404 | 409; message: string }> = {
+  RIDER_PROFILE_NOT_FOUND: { status: 404, message: "No rider profile yet" },
+  ORDER_NOT_ASSIGNED_TO_RIDER: { status: 403, message: "This order isn't assigned to you" },
+  ORDER_ALREADY_FINAL: { status: 409, message: "This order is already completed or cancelled" },
+  ALREADY_ACCEPTED_CANNOT_DECLINE: { status: 409, message: "You've already accepted this delivery -- contact the shop if you can no longer complete it" },
+};
+
+ridersRoute.post(
+  "/rider/riders/me/orders/:orderId/decline",
+  zValidator("json", declineOrderSchema),
+  async (c) => {
+    const authUser = c.get("user");
+    const orderId = c.req.param("orderId");
+    const { reason } = c.req.valid("json");
+
+    try {
+      const rows = (await db.execute(
+        sql`SELECT * FROM public.rpc_rider_decline_order(${authUser.id}::uuid, ${orderId}::uuid, ${reason ?? null})`,
+      )) as unknown as Record<string, unknown>[];
+      return c.json({ data: rows[0] });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      for (const [code, mapped] of Object.entries(RIDER_DECLINE_ERRORS)) {
+        if (message.includes(code)) {
+          return c.json({ error: { code, message: mapped.message } }, mapped.status);
+        }
+      }
+      throw err;
+    }
+  },
+);
