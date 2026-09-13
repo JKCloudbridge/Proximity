@@ -15,6 +15,9 @@ import '../../features/checkout/presentation/screens/order_confirmation_screen.d
 import '../../features/home/presentation/screens/home_screen.dart';
 import '../../features/checkout/presentation/screens/order_history_screen.dart';
 import '../../features/order_again/presentation/screens/order_again_screen.dart';
+import '../../features/organizer/presentation/screens/organizer_screen.dart';
+import '../../features/organizer/presentation/screens/recurring_list_detail_screen.dart';
+import '../../features/organizer/presentation/screens/recurring_list_form_screen.dart';
 import '../../features/product_detail/presentation/screens/product_detail_screen.dart';
 import '../../features/rider/presentation/screens/rider_onboarding_screen.dart';
 import '../../features/shop_detail/presentation/screens/shop_detail_screen.dart';
@@ -50,6 +53,11 @@ const _protectedPaths = <String>[
   '/order-groups',
   '/orders',
   '/shop-orders',
+  // Sprint 11 -- own-user data (§5.2), same no-guest-use-case reasoning as
+  // /wishlist above; a recurring-list reminder's own deep link (`route:
+  // "/cart"`, routes/internal.ts) never points here, so this being gated
+  // doesn't affect that path at all.
+  '/organizer',
 ];
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -92,6 +100,19 @@ final routerProvider = Provider<GoRouter>((ref) {
       // /v1/order-groups' own header explains why in place, not a new route).
       GoRoute(path: '/orders', builder: (context, state) => const OrderHistoryScreen()),
       GoRoute(path: '/shop-orders', builder: (context, state) => const ShopOrdersScreen()),
+      // Sprint 11 -- /organizer/new and /organizer/:id registered before the
+      // plain /organizer list route so a literal "new" is never mistaken for
+      // an id by a naive router (same defensive-but-not-load-bearing
+      // ordering shops.ts's own /shops/near-before-/shops/:id precedent set
+      // in Sprint 5 -- go_router, like Hono, actually prioritizes static
+      // segments over params regardless of registration order, so this
+      // costs nothing and removes the question either way).
+      GoRoute(path: '/organizer/new', builder: (context, state) => const RecurringListFormScreen()),
+      GoRoute(
+        path: '/organizer/:id',
+        builder: (context, state) => RecurringListDetailScreen(listId: state.pathParameters['id']!),
+      ),
+      GoRoute(path: '/organizer', builder: (context, state) => const OrganizerScreen()),
       GoRoute(path: '/shop/:id', builder: (context, state) => ShopDetailScreen(shopId: state.pathParameters['id']!)),
       GoRoute(path: '/product/:id', builder: (context, state) => ProductDetailScreen(productId: state.pathParameters['id']!)),
       StatefulShellRoute.indexedStack(

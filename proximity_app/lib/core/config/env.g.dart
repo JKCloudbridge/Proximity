@@ -23,4 +23,14 @@ final class _Env {
   static const String appleServiceId = '';
 
   static const String appleRedirectUri = '';
+
+  static const String firebaseApiKey = '';
+
+  static const String firebaseProjectId = '';
+
+  static const String firebaseMessagingSenderId = '';
+
+  static const String firebaseAppIdAndroid = '';
+
+  static const String firebaseAppIdIos = '';
 }

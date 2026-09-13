@@ -63,6 +63,16 @@ class AccountScreen extends ConsumerWidget {
             onTap: () => context.push('/orders'),
           ),
           const Divider(height: 1),
+          // Sprint 11 -- Organizer (§4.10). Same "gated at the specific
+          // action" protected-route shape every other own-user-data tile
+          // on this screen already uses.
+          ListTile(
+            leading: const Icon(Icons.event_repeat_outlined),
+            title: const Text('Recurring Lists'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/organizer'),
+          ),
+          const Divider(height: 1),
           if (myShops.isNotEmpty) ...[
             ListTile(
               leading: const Icon(Icons.storefront_outlined),

@@ -514,3 +514,49 @@ export const invoices = pgTable(
   },
   (table) => [unique("invoices_shop_id_invoice_number_key").on(table.shopId, table.invoiceNumber)],
 );
+
+// Sprint 11 (migrations/043) -- see that file's header for the fresh-design
+// reasoning (no recoverable original anywhere, unlike carts/discounts).
+// `intervalDays` mirrors the DB's own CHECK: only non-null when
+// cadence='custom_days'. `nextRunAt` is written by rpc_create_recurring_list
+// (044) on insert and advanced by process_due_recurring_lists (045) on every
+// fire -- no route here ever computes it directly, same "the RPC owns this
+// invariant" shape rpc_place_order's CHECK-constraint tracing already
+// established for order totals.
+export const recurringLists = pgTable("recurring_lists", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  cadence: text("cadence").notNull(),
+  intervalDays: integer("interval_days"),
+  timeOfDay: time("time_of_day").notNull(),
+  nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull(),
+  lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Sprint 11 (migrations/043) -- scoped to a variant, not a bare product,
+// unlike wishlists -- see that migration's header for why (this list feeds
+// rpc_add_to_cart directly, which needs a variant_id). Written only via
+// rpc_create_recurring_list/rpc_replace_recurring_list_items (044), never a
+// plain Drizzle insert/delete -- same atomicity reasoning those RPCs'
+// headers give.
+export const recurringListItems = pgTable(
+  "recurring_list_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    recurringListId: uuid("recurring_list_id")
+      .notNull()
+      .references(() => recurringLists.id, { onDelete: "cascade" }),
+    variantId: uuid("variant_id")
+      .notNull()
+      .references(() => productVariants.id, { onDelete: "cascade" }),
+    quantity: integer("quantity").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("recurring_list_items_recurring_list_id_variant_id_key").on(table.recurringListId, table.variantId)],
+);

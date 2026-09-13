@@ -60,6 +60,25 @@ dependencies:
   # own PDF viewer/browser rather than this app rendering PDFs itself.
   # 6.3.2 verified live against pub.dev before adding.
   url_launcher: ^6.3.2
+  # Sprint 11 -- real FCM (Android) + APNs (iOS) push. Both verified live
+  # against pub.dev before adding (this project's standing rule): firebase_core
+  # 4.14.0 and firebase_messaging 16.6.0 are current. Initialized manually via
+  # FirebaseOptions (lib/core/push/push_service.dart) rather than the
+  # FlutterFire CLI's google-services.json/GoogleService-Info.plist +
+  # Gradle-plugin path -- that path needs a live `flutterfire configure` run
+  # against a real Firebase project this session doesn't have, and would
+  # silently break any future Android Gradle build the moment the plugin is
+  # added with no google-services.json to match it. Manual FirebaseOptions
+  # needs neither file nor Gradle/Xcode changes (§1.1's "platform folders stay
+  # untouched by hand-edits where possible") and is a fully supported,
+  # documented firebase_core initialization path.
+  firebase_core: ^4.14.0
+  firebase_messaging: ^16.6.0
+  # Already resolved transitively (pulled in by flutter_form_builder) --
+  # added as a direct dependency now that organizer_screen.dart imports it
+  # directly for date formatting, rather than relying on an undeclared
+  # transitive import.
+  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:
