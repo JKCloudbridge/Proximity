@@ -183,6 +183,49 @@ cartRoute.post("/cart/items", zValidator("json", addItemSchema), async (c) => {
   return c.json({ data: item }, 201);
 });
 
+// Sprint 10 -- Order Again's "Add All to Cart" / "Add Selected Items to
+// Cart" actions (§4/§5 of Baker Ally's `03_order_again_tab.md` prose spec;
+// that doc's own §9 names `POST /v1/cart/items/batch` directly, so the path
+// is ported verbatim even though the route itself is a fresh implementation
+// -- see routes/orderAgain.ts's header for why). Deliberately per-item
+// best-effort, not all-or-nothing: §5's own rule is "adds all non-zero,
+// in-stock items" -- a group tile can legitimately have one stale/
+// deactivated item sitting in an otherwise-good bundle, and refusing the
+// whole batch over that one item would be worse than skipping it and
+// saying so. Each call into rpc_add_to_cart is already its own atomic,
+// idempotent upsert (024) -- looping it sequentially here is safe to retry
+// and doesn't need a wrapping transaction of its own.
+const batchAddItemSchema = z.object({
+  items: z.array(z.object({ variantId: z.string().uuid(), quantity: z.number().int().positive().max(99).optional() })).min(1).max(50),
+});
+
+cartRoute.post("/cart/items/batch", zValidator("json", batchAddItemSchema), async (c) => {
+  const authUser = c.get("user");
+  const { items } = c.req.valid("json");
+
+  const added: string[] = [];
+  const failed: { variantId: string; code: string }[] = [];
+
+  for (const item of items) {
+    try {
+      await db.execute(sql`SELECT * FROM rpc_add_to_cart(${authUser.id}::uuid, ${item.variantId}::uuid, ${item.quantity ?? 1}::integer)`);
+      added.push(item.variantId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const code = message.includes("VARIANT_NOT_FOUND")
+        ? "VARIANT_NOT_FOUND"
+        : message.includes("OUT_OF_STOCK")
+          ? "OUT_OF_STOCK"
+          : message.includes("INVALID_QUANTITY")
+            ? "INVALID_QUANTITY"
+            : "UNKNOWN_ERROR";
+      failed.push({ variantId: item.variantId, code });
+    }
+  }
+
+  return c.json({ data: { added, failed } }, 201);
+});
+
 const updateItemSchema = z.object({ quantity: z.number().int().positive().max(99) });
 
 // Absolute set (the cart screen's own +/- stepper already knows the current

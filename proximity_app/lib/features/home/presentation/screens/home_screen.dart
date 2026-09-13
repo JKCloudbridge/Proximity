@@ -4,19 +4,18 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../addresses/presentation/providers/address_providers.dart';
+import '../../../catalog/data/models/repeat_product.dart';
 import '../../data/models/nearby_shop.dart';
 import '../../data/models/recommended_product.dart';
 import '../providers/home_providers.dart';
 import '../widgets/category_chip_row.dart';
+import '../widgets/frequently_bought_card.dart';
 import '../widgets/recommended_product_card.dart';
 import '../widgets/shop_card.dart';
 
-/// SPRINT_PLANNING.md §7.1/§11: category chip row, "Recommended for you"
-/// (Sprint 6), and "Shops near you" (Sprint 4), sorted by distance and
-/// filterable by category. Frequently-Bought (§7.1's third named section)
-/// is still Sprint 10's job -- order history doesn't exist yet -- so this
-/// screen has two real sections, not three placeholders pretending to be
-/// finished.
+/// SPRINT_PLANNING.md §7.1/§11: category chip row, conditional "Frequently
+/// Bought" (Sprint 10), "Recommended for you" (Sprint 6), and "Shops near
+/// you" (Sprint 4), sorted by distance and filterable by category.
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -26,6 +25,7 @@ class HomeScreen extends ConsumerWidget {
     final locationAsync = ref.watch(buyerLocationProvider);
     final shopsAsync = ref.watch(nearbyShopsProvider);
     final recommendedAsync = ref.watch(recommendedProductsProvider);
+    final frequentlyBoughtAsync = ref.watch(frequentlyBoughtGateProvider);
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -33,6 +33,7 @@ class HomeScreen extends ConsumerWidget {
         ref.invalidate(buyerLocationProvider);
         ref.invalidate(nearbyShopsProvider);
         ref.invalidate(recommendedProductsProvider);
+        ref.invalidate(frequentlyBoughtGateProvider);
       },
       child: CustomScrollView(
         slivers: [
@@ -46,11 +47,21 @@ class HomeScreen extends ConsumerWidget {
               error: (error, stackTrace) => const SizedBox.shrink(),
             ),
           ),
-          // §7.1's order is chips -> Frequently Bought (Sprint 10, not built)
-          // -> Recommended for you -> Shops near you. Renders nothing at all
-          // (not even a heading) while loading or empty -- same "don't show
-          // a section with nothing under it" rule Frequently-Bought's own
-          // ≥3-groups gate will use once it exists.
+          // §7.1's order: chips -> Frequently Bought (conditional, Sprint
+          // 10) -> Recommended for you -> Shops near you. This section
+          // renders nothing at all -- not even a heading -- unless
+          // `qualifies` is true (repeatPurchases.ts's own header defines the
+          // >=3-qualifying-products gate); a `qualifies: false` response and
+          // a still-loading/error response look identical to the buyer, on
+          // purpose, same "don't show a section with nothing under it" rule
+          // Recommended-for-you's own empty case already established.
+          SliverToBoxAdapter(
+            child: frequentlyBoughtAsync.when(
+              data: (result) => !result.qualifies ? const SizedBox.shrink() : _FrequentlyBoughtSection(products: result.products),
+              loading: () => const SizedBox.shrink(),
+              error: (error, stackTrace) => const SizedBox.shrink(),
+            ),
+          ),
           SliverToBoxAdapter(
             child: recommendedAsync.when(
               data: (products) => products.isEmpty ? const SizedBox.shrink() : _RecommendedSection(products: products),
@@ -136,6 +147,46 @@ class _RecommendedSection extends StatelessWidget {
             itemBuilder: (context, index) {
               final product = products[index];
               return RecommendedProductCard(product: product, onTap: () => context.push('/product/${product.productId}'));
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+}
+
+/// §7.1's conditional "Frequently Bought" section -- same 2-row horizontal
+/// scroll shape as [_RecommendedSection], different data source and gate.
+class _FrequentlyBoughtSection extends StatelessWidget {
+  const _FrequentlyBoughtSection({required this.products});
+
+  final List<RepeatProduct> products;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: Text('Frequently Bought', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+        ),
+        SizedBox(
+          height: 380,
+          child: GridView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 0.72,
+            ),
+            itemCount: products.length,
+            itemBuilder: (context, index) {
+              final product = products[index];
+              return FrequentlyBoughtCard(product: product, onTap: () => context.push('/product/${product.productId}'));
             },
           ),
         ),
