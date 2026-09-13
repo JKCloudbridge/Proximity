@@ -28,4 +28,26 @@ abstract class Env {
 
   @EnviedField(varName: 'APPLE_REDIRECT_URI')
   static const String appleRedirectUri = _Env.appleRedirectUri;
+
+  // Sprint 11 -- all five are client-safe (same "public half of a key pair"
+  // shape as supabaseAnonKey above), fed straight into
+  // Firebase.initializeApp(options: FirebaseOptions(...)) by
+  // push_service.dart. Required (not `optional: true`), matching every
+  // other field in this class -- same "unset means empty string, not a
+  // missing key" shape GOOGLE_IOS_CLIENT_ID etc. already have, since no
+  // real Firebase project exists yet.
+  @EnviedField(varName: 'FIREBASE_API_KEY')
+  static const String firebaseApiKey = _Env.firebaseApiKey;
+
+  @EnviedField(varName: 'FIREBASE_PROJECT_ID')
+  static const String firebaseProjectId = _Env.firebaseProjectId;
+
+  @EnviedField(varName: 'FIREBASE_MESSAGING_SENDER_ID')
+  static const String firebaseMessagingSenderId = _Env.firebaseMessagingSenderId;
+
+  @EnviedField(varName: 'FIREBASE_APP_ID_ANDROID')
+  static const String firebaseAppIdAndroid = _Env.firebaseAppIdAndroid;
+
+  @EnviedField(varName: 'FIREBASE_APP_ID_IOS')
+  static const String firebaseAppIdIos = _Env.firebaseAppIdIos;
 }

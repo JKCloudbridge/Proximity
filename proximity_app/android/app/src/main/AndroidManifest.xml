@@ -1,4 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Sprint 11: Android 13+ (API 33+) requires this as a runtime-granted
+         permission before any notification (including FCM's) can actually
+         show -- FirebaseMessaging.instance.requestPermission()
+         (push_service.dart) is what triggers the system prompt, but only if
+         this is declared here first. firebase_messaging's own AAR manifest
+         merges in its FirebaseMessagingService/receivers automatically
+         (no google-services.json needed for that, see pubspec.yaml's own
+         comment) -- this one permission line is the only manifest change
+         this sprint needs. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="proximity_app"
         android:name="${applicationName}"

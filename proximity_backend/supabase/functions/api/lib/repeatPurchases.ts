@@ -129,26 +129,56 @@ export async function getRepeatProducts({
   limit: number;
   offset?: number;
 }): Promise<RepeatProduct[]> {
+  // Sprint 11 re-review fix (see this file's header -- this was a real bug,
+  // not a style nit): the original query grouped by `pv.id` (variant), not
+  // `p.id` (product), while every caller and this file's own header treat
+  // the result as "distinct products." A product re-ordered under two
+  // different variants (e.g. 200g and 500g of the same item, each bought
+  // on >=2 separate orders) came back as TWO rows here -- which let Home's
+  // own ">=3 qualifying products" gate (routes/home.ts) fire off only 2
+  // real products, directly contradicting Sprint 10's own exit criteria
+  // ("an account with fewer does not [see the section]"). Fixed by
+  // aggregating at the product level first (CTE `per_product`, counting
+  // DISTINCT orders per product regardless of which variant was in each),
+  // then picking one representative variant per product -- the variant
+  // actually used on that product's own most recent qualifying order
+  // (`DISTINCT ON (product_id) ... ORDER BY created_at DESC`), so "Add to
+  // cart" still adds a real, specific variant rather than an arbitrary one.
   const rows = (await db.execute(sql`
-    SELECT pv.id AS variant_id, p.id AS product_id, p.name AS product_name, p.is_veg,
+    WITH per_item AS (
+      SELECT p.id AS product_id, pv.id AS variant_id, o.id AS order_id, o.created_at
+      FROM order_items oi
+      JOIN orders o ON o.id = oi.order_id
+      JOIN product_variants pv ON pv.id = oi.variant_id
+      JOIN products p ON p.id = pv.product_id
+      WHERE o.user_id = ${userId}
+        AND o.status NOT IN ('pending', 'cancelled')
+    ),
+    per_product AS (
+      SELECT product_id,
+             COUNT(DISTINCT order_id)::integer AS times_ordered,
+             MAX(created_at) AS last_ordered_at
+      FROM per_item
+      GROUP BY product_id
+      HAVING COUNT(DISTINCT order_id) >= ${minTimesOrdered}
+    ),
+    representative_variant AS (
+      SELECT DISTINCT ON (product_id) product_id, variant_id
+      FROM per_item
+      ORDER BY product_id, created_at DESC
+    )
+    SELECT rv.variant_id, pp.product_id, p.name AS product_name, p.is_veg,
            pv.unit_value AS variant_unit_value, pv.unit_label AS variant_unit_label,
            pv.price, pv.mrp, pv.stock_status, pv.is_active AS variant_active,
            p.is_active AS product_active,
            s.id AS shop_id, s.name AS shop_name, s.logo_url AS shop_logo_url, s.status AS shop_status,
-           COUNT(DISTINCT o.id)::integer AS times_ordered,
-           MAX(o.created_at) AS last_ordered_at
-    FROM order_items oi
-    JOIN orders o ON o.id = oi.order_id
-    JOIN product_variants pv ON pv.id = oi.variant_id
-    JOIN products p ON p.id = pv.product_id
+           pp.times_ordered, pp.last_ordered_at
+    FROM per_product pp
+    JOIN representative_variant rv ON rv.product_id = pp.product_id
+    JOIN products p ON p.id = pp.product_id
+    JOIN product_variants pv ON pv.id = rv.variant_id
     JOIN shops s ON s.id = p.shop_id
-    WHERE o.user_id = ${userId}
-      AND o.status NOT IN ('pending', 'cancelled')
-    GROUP BY pv.id, pv.unit_value, pv.unit_label, pv.price, pv.mrp, pv.stock_status, pv.is_active,
-             p.id, p.name, p.is_veg, p.is_active,
-             s.id, s.name, s.logo_url, s.status
-    HAVING COUNT(DISTINCT o.id) >= ${minTimesOrdered}
-    ORDER BY MAX(o.created_at) DESC
+    ORDER BY pp.last_ordered_at DESC
     LIMIT ${limit} OFFSET ${offset}
   `)) as unknown as RepeatProductRow[];
 

@@ -18,6 +18,9 @@ import { invoicesRoute } from "./routes/invoices.ts";
 import { shopOrdersRoute } from "./routes/shopOrders.ts";
 import { homeRoute } from "./routes/home.ts";
 import { orderAgainRoute } from "./routes/orderAgain.ts";
+import { pushRoute } from "./routes/push.ts";
+import { recurringListsRoute } from "./routes/recurringLists.ts";
+import { internalRoute } from "./routes/internal.ts";
 
 // Deployed as one Edge Function (`supabase functions deploy api`), reachable
 // at https://<ref>.supabase.co/functions/v1/api/v1/... -- same shape as
@@ -54,6 +57,8 @@ app.route("/v1", invoicesRoute);
 app.route("/v1", shopOrdersRoute);
 app.route("/v1", homeRoute);
 app.route("/v1", orderAgainRoute);
+app.route("/v1", pushRoute);
+app.route("/v1", recurringListsRoute);
 // Not under authMiddleware, not CORS-restricted -- Razorpay's own server
 // calls this directly (server-to-server), never a browser or this app's own
 // Flutter client. paymentsRoute (above) still gates its own /order-groups/*
@@ -61,6 +66,12 @@ app.route("/v1", orderAgainRoute);
 // call site that it carries no auth middleware, rather than one route file
 // mixing "gated" and "ungated" paths under one easy-to-miss exception.
 app.route("/v1", paymentsWebhookRoute);
+// Sprint 11 -- same shape as paymentsWebhookRoute immediately above: no
+// authMiddleware, no CORS. Only ever called by migrations/045's own
+// net.http_post, server-to-server inside Supabase's own network -- the
+// x-internal-secret header check inside routes/internal.ts is this route's
+// real authentication.
+app.route("/v1", internalRoute);
 
 app.onError((err, c) => {
   console.error(err);

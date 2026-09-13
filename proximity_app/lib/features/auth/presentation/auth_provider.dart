@@ -14,6 +14,8 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../../core/providers.dart';
+import '../../../core/push/push_service.dart';
+import '../../push/presentation/providers/push_providers.dart';
 import '../data/auth_repository.dart';
 
 /// GoogleSignIn is a process-wide singleton (GoogleSignIn.instance) --
@@ -54,13 +56,15 @@ class AuthSessionState {
 }
 
 class AuthNotifier extends StateNotifier<AuthSessionState> {
-  AuthNotifier(this._repository) : super(const AuthSessionState()) {
+  AuthNotifier(this._repository, this._pushService) : super(const AuthSessionState()) {
     _subscription = _repository.onAuthStateChange.listen((_) => _sync());
     _sync();
   }
 
   final AuthRepository _repository;
+  final PushService _pushService;
   late final StreamSubscription<void> _subscription;
+  bool _wasLoggedIn = false;
 
   Future<void> _sync() async {
     await _repository.syncSessionToStorage();
@@ -68,10 +72,24 @@ class AuthNotifier extends StateNotifier<AuthSessionState> {
 
     if (session == null) {
       state = const AuthSessionState(isLoading: false);
+      _wasLoggedIn = false;
       return;
     }
 
     state = state.copyWith(isLoggedIn: true, userId: session.user.id, isLoading: true);
+
+    // Sprint 11 -- register this device's push token once a sign-in
+    // actually lands (not re-fired on every `_sync()` call, e.g. a token
+    // refresh from Supabase itself -- only on the false->true transition).
+    // Fire-and-forget: PushService's own contract is "never throw," and
+    // auth state resolution must not wait on a notification-permission
+    // prompt. Deliberately fired regardless of `role` -- a rider is a
+    // `users` row too, and §11's own rider-assignment-push decision needs
+    // exactly this same registration path, not a second one.
+    if (!_wasLoggedIn) {
+      unawaited(_pushService.registerCurrentDevice());
+    }
+    _wasLoggedIn = true;
 
     try {
       final profile = await _repository.hydrateProfile();
@@ -94,8 +112,13 @@ class AuthNotifier extends StateNotifier<AuthSessionState> {
   Future<void> signInWithApple() => _repository.signInWithApple();
 
   Future<void> signOut() async {
+    // Before the session itself is torn down -- the DELETE call needs a
+    // still-valid bearer token to reach authMiddleware (PushService's own
+    // header explains this ordering).
+    await _pushService.unregisterCurrentDevice();
     await _repository.signOut();
     state = const AuthSessionState(isLoading: false);
+    _wasLoggedIn = false;
   }
 
   @override
@@ -106,5 +129,5 @@ class AuthNotifier extends StateNotifier<AuthSessionState> {
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthSessionState>((ref) {
-  return AuthNotifier(ref.watch(authRepositoryProvider));
+  return AuthNotifier(ref.watch(authRepositoryProvider), ref.watch(pushServiceProvider));
 });

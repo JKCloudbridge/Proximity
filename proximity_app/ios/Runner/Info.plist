@@ -49,6 +49,21 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Sprint 11: lets firebase_messaging's APNs delivery wake the app for
+	     background/silent notification processing -- a plain plist key, safe
+	     to hand-edit (§1.1's own "anything that must be hand-edited gets a
+	     comment explaining why"). This alone does NOT make push work on iOS:
+	     the actual "Push Notifications" capability (which creates and signs
+	     Runner.entitlements against a real Apple Developer provisioning
+	     profile) can only be added via Xcode -- no such file exists in this
+	     project yet (checked directly), and this machine has no Xcode/Mac
+	     access. That capability toggle is Sprint 14's job (§1.1's own "iOS
+	     gets one sprint, not a running worry"), same as every other
+	     Xcode-only step this project has deferred there. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
