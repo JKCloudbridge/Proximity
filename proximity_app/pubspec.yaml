@@ -74,6 +74,24 @@ dependencies:
   # documented firebase_core initialization path.
   firebase_core: ^4.14.0
   firebase_messaging: ^16.6.0
+  # Sprint 13 -- mobile crash reporting. 5.3.0 verified live against pub.dev
+  # before adding (requires firebase_core ^4.14.0, already pinned above --
+  # compatible). Unlike firebase_messaging, this one is NOT a "manual
+  # FirebaseOptions is a fully supported substitute for flutterfire configure"
+  # situation -- checked directly against Firebase's own current Flutter
+  # setup docs before assuming otherwise: Crashlytics genuinely needs the
+  # `com.google.firebase.crashlytics` Gradle plugin on Android, which
+  # `flutterfire configure` adds automatically and which this project has
+  # deliberately never hand-added (same Sprint 11 reasoning as ever: adding a
+  # Gradle plugin with no matching google-services.json would break the next
+  # Android build for a reason unrelated to any Dart code here). So this
+  # dependency and lib/core/crash/crash_reporting_service.dart's wiring are
+  # real and ready, but -- unlike every other integration in this project --
+  # they are NOT simply "blocked on credentials arriving." Even once a real
+  # Firebase project exists, `flutterfire configure` (or an equivalent,
+  # deliberate native-build change) still has to run before this actually
+  # uploads anything. See Sprint 13.md for the full account.
+  firebase_crashlytics: ^5.3.0
   # Already resolved transitively (pulled in by flutter_form_builder) --
   # added as a direct dependency now that organizer_screen.dart imports it
   # directly for date formatting, rather than relying on an undeclared

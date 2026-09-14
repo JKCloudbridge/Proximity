@@ -214,7 +214,7 @@ class _RiderOnboardingFormState extends ConsumerState<_RiderOnboardingForm> {
                 ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : Text(widget.existing == null ? 'Submit application' : 'Save changes'),
           ),
-          if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error!, style: const TextStyle(color: Colors.red))),
+          if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error!, style: const TextStyle(color: AppColors.urgent))),
         ],
       ),
     );

@@ -1,6 +1,15 @@
 import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 
+import { captureError, initSentry } from "./lib/sentry.ts";
+
+// Sprint 13 -- backend error tracking (§3.2), decided in for real rather
+// than left "optional" a further sprint. Called once, before any route is
+// registered -- see lib/sentry.ts's own header for the full account
+// (version-pin reasoning, the Deno.serve-instrumentation limitation
+// Supabase's own docs disclose, why tracing/profiling stay off).
+initSentry();
+
 import { healthRoute } from "./routes/health.ts";
 import { authRoute } from "./routes/auth.ts";
 import { addressesRoute } from "./routes/addresses.ts";
@@ -75,6 +84,7 @@ app.route("/v1", internalRoute);
 
 app.onError((err, c) => {
   console.error(err);
+  captureError(err, { method: c.req.method, path: c.req.path });
   return c.json({ error: { code: "INTERNAL_ERROR", message: "Something went wrong" } }, 500);
 });
 

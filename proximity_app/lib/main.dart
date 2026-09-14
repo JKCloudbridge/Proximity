@@ -6,6 +6,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/config/env.dart';
+import 'core/crash/crash_reporting_service.dart';
 import 'core/push/push_service.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
@@ -32,6 +33,11 @@ Future<void> main() async {
   try {
     await Firebase.initializeApp(options: PushService.optionsForCurrentPlatform());
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    // Sprint 13 -- wired only once Firebase has actually initialized (it
+    // needs that to exist first); see crash_reporting_service.dart's own
+    // header for the real, disclosed gap this alone does NOT close (the
+    // native Gradle plugin `flutterfire configure` normally adds).
+    CrashReportingService.wire();
   } catch (err) {
     debugPrint('Firebase init skipped: $err');
   }

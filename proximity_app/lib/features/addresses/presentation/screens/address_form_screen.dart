@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/theme/app_theme.dart';
 import '../../data/location_service.dart' show LocationPermissionResult;
 import '../../data/models/address.dart';
 import '../providers/address_providers.dart';
@@ -170,7 +171,7 @@ class _AddressFormScreenState extends ConsumerState<AddressFormScreen> {
                   ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Text('Save address'),
             ),
-            if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error!, style: const TextStyle(color: Colors.red))),
+            if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error!, style: const TextStyle(color: AppColors.urgent))),
           ],
         ),
       ),

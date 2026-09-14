@@ -121,12 +121,14 @@ class _TopBar extends ConsumerWidget {
           // search) -- the icon stays in place per §7.1's layout, wired to
           // an honest "not built yet" rather than a dead tap.
           IconButton(
+            tooltip: 'Search',
             onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Search -- coming soon')),
             ),
             icon: const Icon(Icons.search, color: AppColors.ink),
           ),
           IconButton(
+            tooltip: isLoggedIn ? 'Account' : 'Sign in',
             onPressed: () {
               if (!isLoggedIn) {
                 context.push('/login');

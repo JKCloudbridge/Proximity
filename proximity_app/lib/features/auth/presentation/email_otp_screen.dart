@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_theme.dart';
 import 'auth_provider.dart';
 
 /// 6-digit code entry, pushed from LoginScreen after sendEmailOtp succeeds.
@@ -72,7 +73,7 @@ class _EmailOtpScreenState extends ConsumerState<EmailOtpScreen> {
                   ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : const Text('Verify'),
             ),
-            if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
+            if (_error != null) Text(_error!, style: const TextStyle(color: AppColors.urgent)),
           ],
         ),
       ),

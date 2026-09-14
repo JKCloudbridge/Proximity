@@ -2,6 +2,7 @@
   "version": "5",
   "specifiers": {
     "npm:@hono/zod-validator@~0.4.1": "0.4.3_hono@4.12.28_zod@3.25.76",
+    "npm:@sentry/deno@^8.55.2": "8.55.2",
     "npm:@supabase/supabase-js@^2.45.0": "2.110.1",
     "npm:drizzle-orm@*": "0.36.4_postgres@3.4.9",
     "npm:drizzle-orm@0.36": "0.36.4_postgres@3.4.9",
@@ -29,6 +30,15 @@
       "integrity": "sha512-dQK2FUMQtowVP00mtIksrlZhdFXQZPC+taih1q4CvPZ5vqdxR/LKBaFg0oAfzd1GlHZXXSPdQfzQnt+ViGvEIQ==",
       "dependencies": [
         "pako"
+      ]
+    },
+    "@sentry/core@8.55.2": {
+      "integrity": "sha512-YlEBwybUcOQ/KjMHDmof1vwweVnBtBxYlQp7DE3fOdtW4pqqdHWTnTntQs4VgYfxzjJYgtkd9LHlGtg8qy+JVQ=="
+    },
+    "@sentry/deno@8.55.2": {
+      "integrity": "sha512-IR0gmxsPq1pLFvF5Airqh53N52YHILuTisE8zr5sFCktun7Z0SlJqnpXwaj2hW111Pg61f3ttizzPi7LSy5igg==",
+      "dependencies": [
+        "@sentry/core"
       ]
     },
     "@supabase/auth-js@2.110.1": {
@@ -119,6 +129,7 @@
   "workspace": {
     "dependencies": [
       "npm:@hono/zod-validator@~0.4.1",
+      "npm:@sentry/deno@^8.55.2",
       "npm:@supabase/supabase-js@^2.45.0",
       "npm:drizzle-orm@0.36",
       "npm:hono@^4.6.0",

@@ -111,24 +111,55 @@ export class OrderNotReassignableError extends Error {
 }
 
 export async function forceReassignRider(orderId: string): Promise<RiderAssignment> {
-  const orderRows = (await db.execute(
-    sql`SELECT status, delivery_fulfilled_by, rider_id FROM orders WHERE id = ${orderId}::uuid`,
-  )) as unknown as { status: string; delivery_fulfilled_by: string | null; rider_id: string | null }[];
-  const order = orderRows[0];
+  // Sprint 13 fix -- caught by this sprint's own required independent
+  // re-review of Sprint 12, not left in. The pre-fix version ran its
+  // read-then-release-then-clear-then-log sequence as four separate,
+  // unwrapped `db.execute` statements -- the one cross-table mutation in
+  // this entire codebase that wasn't atomic (every other one, from
+  // rpc_place_order through rpc_cancel_order/rpc_rider_decline_order, is a
+  // single SECURITY DEFINER SQL function for exactly this reason). Two
+  // concurrent force-reassign calls on the same order could both read the
+  // same `rider_id`, both attempt the release, and both log a
+  // 'rider_reassignment_forced' row -- self-correcting in practice
+  // (assignRider's own rpc_assign_rider call still serializes correctly via
+  // its own FOR UPDATE lock, so no double-assignment could ever result) but
+  // a real, disclosed race nonetheless, and an inconsistency with this
+  // project's own established "cross-row atomicity is never left to
+  // sequential application-code statements" rule. `db.transaction()` was
+  // never used anywhere in this backend before this fix -- checked directly
+  // against the actually-installed drizzle-orm@0.36.4/postgres-js pairing
+  // (`session.js`'s `transaction()` delegates to `postgres`'s own
+  // `client.begin()`) before relying on it, same standing rule every other
+  // third-party API in this project is held to. It holds one pooled
+  // connection for the whole callback, which is exactly what `lib/db.ts`'s
+  // own Supavisor transaction-mode pooler is designed to support. The
+  // subsequent `assignRider()` call is deliberately left OUTSIDE this
+  // transaction -- it's already atomic on its own (rpc_assign_rider), and
+  // it does a real HTTP call (the push notification); holding a DB
+  // transaction open across an outbound HTTP request for no correctness
+  // benefit would be a new, unrelated problem.
+  const order = await db.transaction(async (tx) => {
+    const orderRows = (await tx.execute(
+      sql`SELECT status, delivery_fulfilled_by, rider_id FROM orders WHERE id = ${orderId}::uuid FOR UPDATE`,
+    )) as unknown as { status: string; delivery_fulfilled_by: string | null; rider_id: string | null }[];
+    const row = orderRows[0];
 
-  if (!order) throw new OrderNotReassignableError("ORDER_NOT_FOUND");
-  if (order.delivery_fulfilled_by !== "platform_rider") throw new OrderNotReassignableError("NOT_PLATFORM_RIDER_ORDER");
-  if (["completed", "cancelled", "out_for_delivery"].includes(order.status)) {
-    throw new OrderNotReassignableError("ORDER_NOT_REASSIGNABLE");
-  }
+    if (!row) throw new OrderNotReassignableError("ORDER_NOT_FOUND");
+    if (row.delivery_fulfilled_by !== "platform_rider") throw new OrderNotReassignableError("NOT_PLATFORM_RIDER_ORDER");
+    if (["completed", "cancelled", "out_for_delivery"].includes(row.status)) {
+      throw new OrderNotReassignableError("ORDER_NOT_REASSIGNABLE");
+    }
 
-  if (order.rider_id) {
-    await db.execute(sql`UPDATE riders SET status = 'available' WHERE id = ${order.rider_id}::uuid AND status = 'on_delivery'`);
-    await db.execute(sql`UPDATE orders SET rider_id = NULL, updated_at = now() WHERE id = ${orderId}::uuid`);
-    await db.execute(
-      sql`INSERT INTO order_status_history (order_id, status, note) VALUES (${orderId}::uuid, 'rider_reassignment_forced', 'Shop requested a different rider')`,
-    );
-  }
+    if (row.rider_id) {
+      await tx.execute(sql`UPDATE riders SET status = 'available' WHERE id = ${row.rider_id}::uuid AND status = 'on_delivery'`);
+      await tx.execute(sql`UPDATE orders SET rider_id = NULL, updated_at = now() WHERE id = ${orderId}::uuid`);
+      await tx.execute(
+        sql`INSERT INTO order_status_history (order_id, status, note) VALUES (${orderId}::uuid, 'rider_reassignment_forced', 'Shop requested a different rider')`,
+      );
+    }
+
+    return row;
+  });
 
   return assignRider(orderId);
 }
