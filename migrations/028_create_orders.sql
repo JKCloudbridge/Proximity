@@ -60,6 +60,7 @@ ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 
 -- Two ownership classes read this table (§5.2): the buyer who placed it,
 -- and the shop team it belongs to. Both are backstops only (§5.1).
+DROP POLICY IF EXISTS orders_select_own ON orders;
 CREATE POLICY orders_select_own ON orders
   FOR SELECT USING (user_id = auth.uid());
 
@@ -68,9 +69,11 @@ CREATE POLICY orders_select_own ON orders
 -- at the DB layer. Any member_role can read (owner/staff/delivery all need
 -- to see the order they're fulfilling, §5.3); status advancement goes
 -- through rpc_shop_advance_order_status (Sprint 9), not a direct UPDATE.
+DROP POLICY IF EXISTS orders_select_shop_team ON orders;
 CREATE POLICY orders_select_shop_team ON orders
   FOR SELECT USING (shop_id IN (SELECT shop_id FROM shop_team_members WHERE user_id = auth.uid()));
 
+DROP POLICY IF EXISTS orders_admin_all ON orders;
 CREATE POLICY orders_admin_all ON orders
   FOR ALL USING (public.get_role() = 'admin')
   WITH CHECK (public.get_role() = 'admin');

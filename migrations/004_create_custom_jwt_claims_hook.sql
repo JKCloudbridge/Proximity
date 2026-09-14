@@ -9,6 +9,12 @@
 -- alone, same as Baker Ally's note): Supabase Dashboard -> Authentication ->
 -- Hooks -> "Customize Access Token (JWT) Claims" -> select
 -- public.custom_access_token_hook.
+--
+-- APPLY THIS BEFORE 003 on a fresh project -- 003_create_categories.sql's
+-- admin-write policy calls get_role() (defined below), which doesn't exist
+-- until this file runs. See 003's own header comment for the full story;
+-- not fixed by renumbering given how many later migrations already
+-- reference these two files by their current numbers.
 
 CREATE OR REPLACE FUNCTION public.custom_access_token_hook(event jsonb)
 RETURNS jsonb

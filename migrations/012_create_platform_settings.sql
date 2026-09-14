@@ -19,9 +19,11 @@ CREATE TABLE IF NOT EXISTS platform_settings (
 
 ALTER TABLE platform_settings ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS platform_settings_select_all ON platform_settings;
 CREATE POLICY platform_settings_select_all ON platform_settings
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS platform_settings_admin_write ON platform_settings;
 CREATE POLICY platform_settings_admin_write ON platform_settings
   FOR ALL USING (public.get_role() = 'admin')
   WITH CHECK (public.get_role() = 'admin');

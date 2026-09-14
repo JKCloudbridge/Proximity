@@ -6,6 +6,15 @@
 -- Admin-owned, not shopkeeper-editable -- keeps cross-shop category
 -- filtering (buyer taps "Beauty" -> every shop's Beauty items) consistent
 -- instead of each shop inventing its own top-level taxonomy.
+--
+-- LATENT ORDERING BUG, caught applying this to a fresh project in strict
+-- numeric order (never surfaced before because every prior apply happened
+-- out of order by accident): the policy below calls public.get_role(),
+-- which isn't defined until 004_create_custom_jwt_claims_hook.sql. Run 004
+-- BEFORE this file on any fresh project. Not fixed by renumbering -- by the
+-- time this was caught, 003/004's numbers were already load-bearing across
+-- 40+ later migrations and a dozen merged Sprint N.md docs; the one-line
+-- reorder-at-apply-time workaround is far lower-risk than a renumber.
 
 CREATE TABLE IF NOT EXISTS categories (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -21,9 +30,11 @@ ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 
 -- Public read (anyone browsing, logged in or not); writes are admin-only,
 -- enforced via the get_role() helper defined in 004 alongside the JWT hook.
+DROP POLICY IF EXISTS categories_select_all ON categories;
 CREATE POLICY categories_select_all ON categories
   FOR SELECT USING (is_active = true);
 
+DROP POLICY IF EXISTS categories_admin_write ON categories;
 CREATE POLICY categories_admin_write ON categories
   FOR ALL USING (public.get_role() = 'admin')
   WITH CHECK (public.get_role() = 'admin');

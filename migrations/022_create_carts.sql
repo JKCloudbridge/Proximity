@@ -37,6 +37,7 @@ ALTER TABLE carts ENABLE ROW LEVEL SECURITY;
 -- Own-user data (§5.2), same RLS shape as addresses/wishlists -- a backstop
 -- only (§5.1), not the live enforcement (routes/cart.ts's authMiddleware +
 -- explicit user_id filtering is that).
+DROP POLICY IF EXISTS carts_all_own ON carts;
 CREATE POLICY carts_all_own ON carts
   FOR ALL USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());

@@ -17,6 +17,7 @@ CREATE INDEX IF NOT EXISTS idx_product_images_product_id ON product_images(produ
 
 ALTER TABLE product_images ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS product_images_select_public ON product_images;
 CREATE POLICY product_images_select_public ON product_images
   FOR SELECT USING (
     product_id IN (
@@ -25,6 +26,7 @@ CREATE POLICY product_images_select_public ON product_images
     )
   );
 
+DROP POLICY IF EXISTS product_images_select_team ON product_images;
 CREATE POLICY product_images_select_team ON product_images
   FOR SELECT USING (
     product_id IN (
@@ -33,6 +35,7 @@ CREATE POLICY product_images_select_team ON product_images
   );
 
 -- Owner + staff (§5.3), same as products/product_variants above.
+DROP POLICY IF EXISTS product_images_team_write ON product_images;
 CREATE POLICY product_images_team_write ON product_images
   FOR ALL USING (
     product_id IN (
@@ -47,6 +50,7 @@ CREATE POLICY product_images_team_write ON product_images
     )
   );
 
+DROP POLICY IF EXISTS product_images_admin_all ON product_images;
 CREATE POLICY product_images_admin_all ON product_images
   FOR ALL USING (public.get_role() = 'admin')
   WITH CHECK (public.get_role() = 'admin');

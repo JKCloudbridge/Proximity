@@ -47,13 +47,16 @@ ALTER TABLE riders ENABLE ROW LEVEL SECURITY;
 -- from the self-update WITH CHECK, same "pin the admin-only column" pattern
 -- as users_update_own (001) and shops_owner_update (007) -- a rider can't
 -- verify themselves any more than a shopkeeper can approve their own shop.
+DROP POLICY IF EXISTS riders_select_own ON riders;
 CREATE POLICY riders_select_own ON riders
   FOR SELECT USING (user_id = auth.uid());
 
+DROP POLICY IF EXISTS riders_update_own ON riders;
 CREATE POLICY riders_update_own ON riders
   FOR UPDATE USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid() AND is_verified = (SELECT is_verified FROM riders r2 WHERE r2.id = riders.id));
 
+DROP POLICY IF EXISTS riders_admin_all ON riders;
 CREATE POLICY riders_admin_all ON riders
   FOR ALL USING (public.get_role() = 'admin')
   WITH CHECK (public.get_role() = 'admin');

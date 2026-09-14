@@ -45,9 +45,11 @@ ALTER TABLE product_cross_sell ENABLE ROW LEVEL SECURITY;
 -- written now so it's correct the moment a route does exist, same
 -- "policy alongside the table, not bolted on later" discipline every prior
 -- migration in this project has followed.
+DROP POLICY IF EXISTS product_cross_sell_select_all ON product_cross_sell;
 CREATE POLICY product_cross_sell_select_all ON product_cross_sell
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS product_cross_sell_admin_write ON product_cross_sell;
 CREATE POLICY product_cross_sell_admin_write ON product_cross_sell
   FOR ALL USING (public.get_role() = 'admin')
   WITH CHECK (public.get_role() = 'admin');

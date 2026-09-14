@@ -56,16 +56,37 @@ CREATE OR REPLACE FUNCTION public.rpc_assign_rider(p_order_id UUID)
 RETURNS TABLE(order_id UUID, rider_id UUID, rider_full_name TEXT, rider_phone TEXT)
 LANGUAGE plpgsql
 SECURITY DEFINER
+-- **Real bug, caught by actually running this against a live database --
+-- fixed twice, and the full honest story of both attempts is worth keeping
+-- here rather than just the final answer.** Original code: bare
+-- `GEOGRAPHY`/`<->` under `SET search_path = ''`, with a comment claiming
+-- PostGIS's own schema "is what actually resolves this" -- backwards; an
+-- empty search_path resolves nothing outside pg_catalog. First fix tried:
+-- `SET search_path = 'public, extensions'`, a guess at which schema
+-- PostGIS landed in without querying the live database to check --
+-- **run against the real database, and it still failed with the identical
+-- error**, confirmed by the error's own line number matching this fixed
+-- file exactly. Queried directly this time, not guessed:
+-- `SELECT extname, extnamespace::regnamespace FROM pg_extension` on the
+-- actual live database shows `postgis` in **`public`** (this project's
+-- migrations/000 never gave `CREATE EXTENSION postgis` an explicit
+-- `SCHEMA` clause, so it landed wherever the connecting role's own default
+-- search_path pointed at creation time -- `public`, on this database. Not
+-- necessarily true of every Supabase project; don't copy the schema name
+-- here into a new project without checking again). Since the search_path
+-- route already failed once for reasons not fully explained even after
+-- reasoning through PL/pgSQL's GUC/compile-time semantics by hand, the fix
+-- actually applied here sidesteps that whole question: every PostGIS
+-- type/function/operator below is explicitly schema-qualified
+-- (`public.geography`, `OPERATOR(public.<->)`), which resolves via direct
+-- catalog lookup regardless of search_path -- and `SET search_path = ''`
+-- is restored to this function's original, tighter security posture,
+-- since full qualification makes widening it unnecessary.
 SET search_path = ''
 AS $$
 DECLARE
   v_order      public.orders%ROWTYPE;
-  -- Unqualified GEOGRAPHY, same convention every other RPC in this project
-  -- uses for PostGIS types/functions under SET search_path = '' (::geography
-  -- casts in rpc_create_shop/rpc_place_order, never public.geography) --
-  -- PostGIS's own extension schema, not public, is what actually resolves
-  -- this on a real Supabase project.
-  v_shop_point GEOGRAPHY;
+  v_shop_point public.geography;
   v_rider      public.riders%ROWTYPE;
 BEGIN
   SELECT * INTO v_order FROM public.orders WHERE id = p_order_id FOR UPDATE;
@@ -109,7 +130,7 @@ BEGIN
   SELECT * INTO v_rider
   FROM public.riders
   WHERE status = 'available' AND is_verified = true AND current_location IS NOT NULL
-  ORDER BY current_location <-> v_shop_point
+  ORDER BY current_location OPERATOR(public.<->) v_shop_point
   LIMIT 1
   FOR UPDATE SKIP LOCKED;
 

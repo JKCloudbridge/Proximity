@@ -26,9 +26,11 @@ CREATE INDEX IF NOT EXISTS idx_order_status_history_order_changed
 
 ALTER TABLE order_status_history ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS order_status_history_select_own ON order_status_history;
 CREATE POLICY order_status_history_select_own ON order_status_history
   FOR SELECT USING (order_id IN (SELECT id FROM orders WHERE user_id = auth.uid()));
 
+DROP POLICY IF EXISTS order_status_history_select_shop_team ON order_status_history;
 CREATE POLICY order_status_history_select_shop_team ON order_status_history
   FOR SELECT USING (
     order_id IN (
@@ -37,5 +39,6 @@ CREATE POLICY order_status_history_select_shop_team ON order_status_history
     )
   );
 
+DROP POLICY IF EXISTS order_status_history_select_admin ON order_status_history;
 CREATE POLICY order_status_history_select_admin ON order_status_history
   FOR SELECT USING (public.get_role() = 'admin');

@@ -52,6 +52,17 @@ CREATE OR REPLACE FUNCTION public.rpc_create_shop(
 RETURNS SETOF shops
 LANGUAGE plpgsql
 SECURITY DEFINER
+-- Same real bug migrations/039's own header now documents the full story
+-- of (two attempts, the second one confirmed against a live query, not
+-- guessed): the original unqualified `ST_SetSRID(ST_MakePoint(...))
+-- ::geography` below can't resolve under `SET search_path = ''`, and
+-- widening the search_path (rather than schema-qualifying directly) turned
+-- out not to fix it for reasons that weren't fully pinned down even after
+-- reasoning through PL/pgSQL's own compile/GUC semantics by hand. Fixed
+-- here the same confirmed way: every PostGIS function/type explicitly
+-- schema-qualified to `public` (confirmed via `pg_extension`/
+-- `extnamespace` against the live database, not assumed), search_path
+-- restored to its original, tighter `''`.
 SET search_path = ''
 AS $$
 DECLARE
@@ -63,7 +74,7 @@ BEGIN
     supports_delivery, delivery_mode, min_order_value
   ) VALUES (
     p_owner_id, p_name, p_description, p_address_line, p_city, p_pincode,
-    ST_SetSRID(ST_MakePoint(p_lng, p_lat), 4326)::geography,
+    public.ST_SetSRID(public.ST_MakePoint(p_lng, p_lat), 4326)::public.geography,
     p_gstin, p_fssai_license_no, p_service_radius_km, p_supports_pickup,
     p_supports_delivery, p_delivery_mode, p_min_order_value
   )

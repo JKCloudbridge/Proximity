@@ -26,11 +26,13 @@ ALTER TABLE shop_business_hours ENABLE ROW LEVEL SECURITY;
 -- Public read only for approved shops -- buyer app needs this to compute
 -- "open now" badges (§10 backlog) and fulfillment slots (§4.6) without
 -- leaking a pending shop's hours.
+DROP POLICY IF EXISTS shop_business_hours_select_public ON shop_business_hours;
 CREATE POLICY shop_business_hours_select_public ON shop_business_hours
   FOR SELECT USING (
     shop_id IN (SELECT id FROM shops WHERE status = 'approved')
   );
 
+DROP POLICY IF EXISTS shop_business_hours_select_team ON shop_business_hours;
 CREATE POLICY shop_business_hours_select_team ON shop_business_hours
   FOR SELECT USING (
     shop_id IN (SELECT shop_id FROM shop_team_members WHERE user_id = auth.uid())
@@ -38,6 +40,7 @@ CREATE POLICY shop_business_hours_select_team ON shop_business_hours
 
 -- Owner-only write (§5.3: "Edit shop settings, delivery mode, business
 -- hours" is owner-only).
+DROP POLICY IF EXISTS shop_business_hours_owner_write ON shop_business_hours;
 CREATE POLICY shop_business_hours_owner_write ON shop_business_hours
   FOR ALL USING (
     shop_id IN (SELECT shop_id FROM shop_team_members WHERE user_id = auth.uid() AND member_role = 'owner')
@@ -46,6 +49,7 @@ CREATE POLICY shop_business_hours_owner_write ON shop_business_hours
     shop_id IN (SELECT shop_id FROM shop_team_members WHERE user_id = auth.uid() AND member_role = 'owner')
   );
 
+DROP POLICY IF EXISTS shop_business_hours_admin_all ON shop_business_hours;
 CREATE POLICY shop_business_hours_admin_all ON shop_business_hours
   FOR ALL USING (public.get_role() = 'admin')
   WITH CHECK (public.get_role() = 'admin');

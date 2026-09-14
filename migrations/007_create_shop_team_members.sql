@@ -30,6 +30,7 @@ ALTER TABLE shop_team_members ENABLE ROW LEVEL SECURITY;
 -- A team member can see their shop's own team list (self-referential
 -- subquery against the same table -- standard, if slightly unusual-looking,
 -- pattern for "who else is on my team").
+DROP POLICY IF EXISTS shop_team_members_select_own_shop ON shop_team_members;
 CREATE POLICY shop_team_members_select_own_shop ON shop_team_members
   FOR SELECT USING (
     shop_id IN (SELECT shop_id FROM shop_team_members m WHERE m.user_id = auth.uid())
@@ -41,6 +42,7 @@ CREATE POLICY shop_team_members_select_own_shop ON shop_team_members
 -- SECURITY DEFINER, not through PostgREST/RLS at all, so it doesn't need a
 -- policy that would otherwise have to allow "insert a row for yourself with
 -- no existing owner row to check against."
+DROP POLICY IF EXISTS shop_team_members_owner_manage ON shop_team_members;
 CREATE POLICY shop_team_members_owner_manage ON shop_team_members
   FOR ALL USING (
     shop_id IN (SELECT shop_id FROM shop_team_members m WHERE m.user_id = auth.uid() AND m.member_role = 'owner')
@@ -49,11 +51,13 @@ CREATE POLICY shop_team_members_owner_manage ON shop_team_members
     shop_id IN (SELECT shop_id FROM shop_team_members m WHERE m.user_id = auth.uid() AND m.member_role = 'owner')
   );
 
+DROP POLICY IF EXISTS shop_team_members_admin_all ON shop_team_members;
 CREATE POLICY shop_team_members_admin_all ON shop_team_members
   FOR ALL USING (public.get_role() = 'admin')
   WITH CHECK (public.get_role() = 'admin');
 
 -- The two shops policies deferred from 006 -- see that file's tail comment.
+DROP POLICY IF EXISTS shops_select_team ON shops;
 CREATE POLICY shops_select_team ON shops
   FOR SELECT USING (id IN (SELECT shop_id FROM shop_team_members WHERE user_id = auth.uid()));
 
@@ -62,6 +66,7 @@ CREATE POLICY shops_select_team ON shops
 -- commission overrides). WITH CHECK pins both columns to their current
 -- value, same "exclude this column from self-service edits" pattern as
 -- users_update_own (001) pinning `role`.
+DROP POLICY IF EXISTS shops_owner_update ON shops;
 CREATE POLICY shops_owner_update ON shops
   FOR UPDATE USING (
     id IN (SELECT shop_id FROM shop_team_members WHERE user_id = auth.uid() AND member_role = 'owner')
