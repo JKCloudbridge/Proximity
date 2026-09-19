@@ -3,16 +3,20 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/utils/currency.dart';
+import '../../../../shared/widgets/quick_add_control.dart';
 import '../../data/models/recommended_product.dart';
 
 /// One card in Home's "Recommended for you" 2-row horizontal scroll (§7.1)
 /// -- sized by the enclosing horizontal [GridView]'s delegate
 /// (_RecommendedSection in home_screen.dart), not a fixed width of its own.
-/// Tap only navigates to the PDP -- same "no quick-add on the card"
-/// restraint [ProductGridTile] (features/shop_detail) already established
-/// for the shop-detail grid, which predates this widget and has no cart
-/// button either despite showing a wishlist heart; adding one here would be
-/// a new affordance this sprint's scope doesn't ask for.
+///
+/// Sprint 15 feedback: gained the same bottom-right quick-add control
+/// [ProductGridTile] (features/shop_detail) already has -- the restraint
+/// this file's header used to describe ("no quick-add on the card") was a
+/// Sprint 6 decision, revisited and reversed here at your explicit request,
+/// not an oversight. Needed `GET /v1/recommended` to start returning a real
+/// `variantId` first (routes/recommendations.ts) -- see that file's own
+/// header for why it never had before.
 class RecommendedProductCard extends StatelessWidget {
   const RecommendedProductCard({super.key, required this.product, required this.onTap});
 
@@ -41,6 +45,8 @@ class RecommendedProductCard extends StatelessWidget {
                       ? CachedNetworkImage(imageUrl: product.imageUrl!, fit: BoxFit.cover)
                       : const ColoredBox(color: AppColors.brandTint, child: Icon(Icons.shopping_basket_outlined, color: AppColors.brand)),
                   if (product.isVeg != null) Positioned(top: 6, left: 6, child: _VegDot(isVeg: product.isVeg!)),
+                  if (product.variantId != null)
+                    Positioned(right: 6, bottom: 6, child: QuickAddControl(variantId: product.variantId!)),
                 ],
               ),
             ),

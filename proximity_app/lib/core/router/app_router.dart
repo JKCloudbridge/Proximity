@@ -10,6 +10,8 @@ import '../../features/addresses/presentation/screens/address_list_screen.dart';
 import '../../features/auth/presentation/auth_provider.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/cart/presentation/screens/cart_screen.dart';
+import '../../features/categories/presentation/screens/categories_screen.dart';
+import '../../features/categories/presentation/screens/category_shops_screen.dart';
 import '../../features/checkout/presentation/screens/checkout_screen.dart';
 import '../../features/checkout/presentation/screens/order_confirmation_screen.dart';
 import '../../features/home/presentation/screens/home_screen.dart';
@@ -24,7 +26,6 @@ import '../../features/shop_detail/presentation/screens/shop_detail_screen.dart'
 import '../../features/shop_orders/presentation/screens/shop_orders_screen.dart';
 import '../../features/wishlist/presentation/screens/wishlist_screen.dart';
 import '../../shared/widgets/app_shell.dart';
-import '../../shared/widgets/placeholder_screen.dart';
 
 /// Guests can browse (same rule as Baker Ally: login is gated at specific
 /// actions, not at the door). Sprint 2 adds /account and /rider/onboarding
@@ -115,11 +116,19 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/organizer', builder: (context, state) => const OrganizerScreen()),
       GoRoute(path: '/shop/:id', builder: (context, state) => ShopDetailScreen(shopId: state.pathParameters['id']!)),
       GoRoute(path: '/product/:id', builder: (context, state) => ProductDetailScreen(productId: state.pathParameters['id']!)),
+      // Sprint 15 -- the Categories tab's tap-through (Sprint planning/
+      // Sprint 15.md), a pushed route rather than a shell tab, same
+      // "/shop/:id and /product/:id are deliberately NOT protected, guests
+      // browse the full path" rule just above -- not added to
+      // `_protectedPaths`.
+      GoRoute(path: '/categories/:id', builder: (context, state) => CategoryShopsScreen(categoryId: state.pathParameters['id']!)),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => AppShell(navigationShell: navigationShell),
         branches: [
           StatefulShellBranch(routes: [GoRoute(path: '/', builder: (c, s) => const HomeScreen())]),
-          StatefulShellBranch(routes: [GoRoute(path: '/categories', builder: (c, s) => const PlaceholderScreen(title: 'Categories'))]),
+          // Sprint 15 -- replaces PlaceholderScreen(title: 'Categories'),
+          // Sprint 1's original stand-in (Sprint planning/Sprint 15.md).
+          StatefulShellBranch(routes: [GoRoute(path: '/categories', builder: (c, s) => const CategoriesScreen())]),
           StatefulShellBranch(routes: [GoRoute(path: '/cart', builder: (c, s) => const CartScreen())]),
           StatefulShellBranch(routes: [GoRoute(path: '/order-again', builder: (c, s) => const OrderAgainScreen())]),
         ],

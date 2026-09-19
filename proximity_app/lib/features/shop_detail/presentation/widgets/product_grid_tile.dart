@@ -3,12 +3,21 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/utils/currency.dart';
+import '../../../../shared/widgets/quick_add_control.dart';
 import '../../../catalog/data/models/shop_product.dart';
 import '../../../wishlist/presentation/widgets/wishlist_heart_button.dart';
 
 /// One tile in the shop-detail product grid (§7.1, next to
-/// [SubCategoryRail]). Tapping anywhere but the heart opens the PDP
-/// (§11 Sprint 5's exit criteria: "Home -> shop -> product -> variant").
+/// [SubCategoryRail]). Tapping anywhere but the heart/quick-add opens the
+/// PDP (§11 Sprint 5's exit criteria: "Home -> shop -> product -> variant").
+///
+/// Sprint 15 feedback: quick-add control added bottom-right (mirroring the
+/// wishlist heart's own top-right corner-overlay placement) -- always adds
+/// the *cheapest* active variant, matching the price this tile already
+/// displays ("From ₹X" for a multi-variant product). A product with more
+/// than one variant still only gets a true variant picker on the PDP itself
+/// (variant_selector.dart) -- this is a shortcut for the common single- or
+/// cheapest-variant case, not a replacement for that screen.
 class ProductGridTile extends StatelessWidget {
   const ProductGridTile({super.key, required this.product, required this.onTap});
 
@@ -55,6 +64,14 @@ class ProductGridTile extends StatelessWidget {
                           padding: EdgeInsets.symmetric(vertical: 4),
                           child: Text('Out of stock', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 11)),
                         ),
+                      ),
+                    )
+                  else if (product.variants.isNotEmpty)
+                    Positioned(
+                      right: 6,
+                      bottom: 6,
+                      child: QuickAddControl(
+                        variantId: product.variants.reduce((a, b) => a.price <= b.price ? a : b).id,
                       ),
                     ),
                 ],

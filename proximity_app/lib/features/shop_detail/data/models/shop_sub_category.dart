@@ -27,4 +27,9 @@ class ShopSubCategory {
       sortOrder: json['sortOrder'] as int? ?? 0,
     );
   }
+
+  // Sprint 15 -- local cache round-trip (core/cache), not the network.
+  Map<String, dynamic> toJson() {
+    return {'id': id, 'shopId': shopId, 'categoryId': categoryId, 'name': name, 'iconUrl': iconUrl, 'sortOrder': sortOrder};
+  }
 }

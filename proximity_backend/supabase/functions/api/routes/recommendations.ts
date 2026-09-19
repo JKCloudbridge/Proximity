@@ -128,6 +128,20 @@ recommendationsRoute.get("/recommended", optionalAuthMiddleware, zValidator("que
     if (!firstImageByProduct.has(image.productId)) firstImageByProduct.set(image.productId, image.imageUrl);
   }
 
+  // Sprint 15 feedback: Home's own Recommended cards grew a quick-add
+  // button, which needs a real variant id to call POST /v1/cart/items with
+  // -- this route never returned one before (only the aggregated MIN(price)
+  // used for display). Cheapest active variant per product, matching what
+  // `minPrice` already displays -- same "add whatever price is shown"
+  // semantics ProductGridTile's own quick-add uses.
+  const cheapestVariantRows = (await db.execute(sql`
+    SELECT DISTINCT ON (product_id) product_id, id AS variant_id
+    FROM product_variants
+    WHERE product_id = ANY(${productIds}::uuid[]) AND is_active = true
+    ORDER BY product_id, price ASC
+  `)) as unknown as { product_id: string; variant_id: string }[];
+  const cheapestVariantByProduct = new Map(cheapestVariantRows.map((v) => [v.product_id, v.variant_id]));
+
   const data = selected.map((r) => ({
     productId: r.id,
     name: r.name,
@@ -137,6 +151,7 @@ recommendationsRoute.get("/recommended", optionalAuthMiddleware, zValidator("que
     shopLogoUrl: r.shop_logo_url,
     imageUrl: firstImageByProduct.get(r.id) ?? null,
     minPrice: r.min_price,
+    variantId: cheapestVariantByProduct.get(r.id) ?? null,
     distanceKm: Math.round((r.distance_m / 1000) * 10) / 10,
   }));
 

@@ -52,6 +52,26 @@ class NearbyShop {
       nextSlot: json['nextSlot'] != null ? NextSlot.fromJson(json['nextSlot'] as Map<String, dynamic>) : null,
     );
   }
+
+  // Sprint 15 -- local cache round-trip (core/cache), not the network.
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'description': description,
+      'logoUrl': logoUrl,
+      'coverImageUrl': coverImageUrl,
+      'city': city,
+      'addressLine': addressLine,
+      'serviceRadiusKm': serviceRadiusKm,
+      'supportsPickup': supportsPickup,
+      'supportsDelivery': supportsDelivery,
+      'deliveryMode': deliveryMode,
+      'minOrderValue': minOrderValue,
+      'distanceKm': distanceKm,
+      'nextSlot': nextSlot?.toJson(),
+    };
+  }
 }
 
 /// §7.2's live countdown badge data -- just the boundary timestamps.
@@ -71,4 +91,6 @@ class NextSlot {
       slotEnd: DateTime.parse(json['slotEnd'] as String),
     );
   }
+
+  Map<String, dynamic> toJson() => {'slotStart': slotStart.toIso8601String(), 'slotEnd': slotEnd.toIso8601String()};
 }

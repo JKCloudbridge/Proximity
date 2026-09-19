@@ -57,4 +57,24 @@ class ShopDetail {
       nextSlot: json['nextSlot'] != null ? NextSlot.fromJson(json['nextSlot'] as Map<String, dynamic>) : null,
     );
   }
+
+  // Sprint 15 -- local cache round-trip (core/cache), not the network.
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'description': description,
+      'logoUrl': logoUrl,
+      'coverImageUrl': coverImageUrl,
+      'city': city,
+      'addressLine': addressLine,
+      'pincode': pincode,
+      'serviceRadiusKm': serviceRadiusKm,
+      'supportsPickup': supportsPickup,
+      'supportsDelivery': supportsDelivery,
+      'deliveryMode': deliveryMode,
+      'minOrderValue': minOrderValue,
+      'nextSlot': nextSlot?.toJson(),
+    };
+  }
 }

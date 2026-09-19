@@ -62,4 +62,25 @@ class RepeatProduct {
       lastOrderedAt: DateTime.parse(json['lastOrderedAt'] as String),
     );
   }
+
+  // Sprint 15 -- local cache round-trip (core/cache), not the network.
+  Map<String, dynamic> toJson() {
+    return {
+      'variantId': variantId,
+      'productId': productId,
+      'name': name,
+      'isVeg': isVeg,
+      'unitValue': unitValue,
+      'unitLabel': unitLabel,
+      'price': price,
+      'mrp': mrp,
+      'imageUrl': imageUrl,
+      'isAvailable': isAvailable,
+      'shopId': shopId,
+      'shopName': shopName,
+      'shopLogoUrl': shopLogoUrl,
+      'timesOrdered': timesOrdered,
+      'lastOrderedAt': lastOrderedAt.toIso8601String(),
+    };
+  }
 }
