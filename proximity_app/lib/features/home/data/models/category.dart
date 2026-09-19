@@ -19,4 +19,10 @@ class Category {
       sortOrder: json['sortOrder'] as int? ?? 0,
     );
   }
+
+  // Sprint 15 -- round-trips through the local cache (core/cache), not the
+  // network; a plain mirror of fromJson's own field set.
+  Map<String, dynamic> toJson() {
+    return {'id': id, 'name': name, 'icon': icon, 'imageUrl': imageUrl, 'sortOrder': sortOrder};
+  }
 }

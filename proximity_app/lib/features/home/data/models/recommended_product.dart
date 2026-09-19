@@ -11,6 +11,7 @@ class RecommendedProduct {
     this.shopLogoUrl,
     this.imageUrl,
     required this.minPrice,
+    this.variantId,
     required this.distanceKm,
   });
 
@@ -22,6 +23,13 @@ class RecommendedProduct {
   final String? shopLogoUrl;
   final String? imageUrl;
   final int minPrice;
+  // Sprint 15 feedback: the cheapest active variant's id, matching `minPrice`
+  // -- added specifically so the Home Recommended card's own quick-add
+  // button (ProductGridTile's shared QuickAddControl) has a real variant to
+  // call POST /v1/cart/items with. Nullable since a product can in theory
+  // have zero active variants (routes/recommendations.ts's own comment on
+  // this), in which case there's nothing valid to quick-add.
+  final String? variantId;
   final double distanceKm;
 
   factory RecommendedProduct.fromJson(Map<String, dynamic> json) {
@@ -34,7 +42,24 @@ class RecommendedProduct {
       shopLogoUrl: json['shopLogoUrl'] as String?,
       imageUrl: json['imageUrl'] as String?,
       minPrice: json['minPrice'] as int,
+      variantId: json['variantId'] as String?,
       distanceKm: (json['distanceKm'] as num).toDouble(),
     );
+  }
+
+  // Sprint 15 -- local cache round-trip (core/cache), not the network.
+  Map<String, dynamic> toJson() {
+    return {
+      'productId': productId,
+      'name': name,
+      'isVeg': isVeg,
+      'shopId': shopId,
+      'shopName': shopName,
+      'shopLogoUrl': shopLogoUrl,
+      'imageUrl': imageUrl,
+      'minPrice': minPrice,
+      'variantId': variantId,
+      'distanceKm': distanceKm,
+    };
   }
 }

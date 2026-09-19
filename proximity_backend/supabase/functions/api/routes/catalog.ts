@@ -480,11 +480,22 @@ catalogRoute.delete("/shop/shops/:shopId/products/:productId/images/:id", async 
 // shop_sub_categories, §4.3) -- omitted entirely shows the shop's full
 // catalog, same "All" convention selectedCategoryIdProvider already
 // established on Home (Sprint 4).
-const shopProductsQuerySchema = z.object({ subCategoryId: z.string().uuid().optional() });
+//
+// Sprint 15: optional categoryId narrows to the *platform's* top-level
+// category instead (products.categoryId, not_null since Sprint 3 -- see
+// this file's createProductSchema/schema.ts) -- the Categories tab's
+// tap-through grid (§7.1/§11 Sprint 15's "right grid shows the selected
+// shop's products within that category"). Deliberately independent of
+// subCategoryId rather than folded into one param: they filter different
+// columns for two different callers (the shop-detail rail vs. the new
+// Categories screen) that never send both at once, and `and()` already
+// treats an omitted filter as a no-op, so accepting both costs nothing and
+// keeps each caller's own query un-conflated with the other's.
+const shopProductsQuerySchema = z.object({ subCategoryId: z.string().uuid().optional(), categoryId: z.string().uuid().optional() });
 
 catalogRoute.get("/shops/:shopId/products", zValidator("query", shopProductsQuerySchema), async (c) => {
   const shopId = c.req.param("shopId");
-  const { subCategoryId } = c.req.valid("query");
+  const { subCategoryId, categoryId } = c.req.valid("query");
 
   const [shop] = await db.select({ id: shops.id }).from(shops).where(and(eq(shops.id, shopId), eq(shops.status, "approved"))).limit(1);
   if (!shop) return c.json({ error: { code: "SHOP_NOT_FOUND", message: "Shop not found" } }, 404);
@@ -497,6 +508,7 @@ catalogRoute.get("/shops/:shopId/products", zValidator("query", shopProductsQuer
         eq(products.shopId, shopId),
         eq(products.isActive, true),
         subCategoryId ? eq(products.subCategoryId, subCategoryId) : undefined,
+        categoryId ? eq(products.categoryId, categoryId) : undefined,
       ),
     )
     .orderBy(products.createdAt);

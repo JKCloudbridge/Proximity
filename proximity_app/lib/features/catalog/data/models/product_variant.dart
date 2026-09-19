@@ -54,4 +54,24 @@ class ProductVariant {
       isActive: json['isActive'] as bool,
     );
   }
+
+  // Sprint 15 -- local cache round-trip (core/cache), not the network.
+  // `unitValue` goes back out as a string, matching the exact shape
+  // `fromJson` above expects (Drizzle's own numeric-as-string convention,
+  // per this file's header) -- so a cache-decoded row parses through the
+  // identical code path as a fresh network response, not a second one.
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'productId': productId,
+      'unitValue': unitValue.toString(),
+      'unitLabel': unitLabel,
+      'sku': sku,
+      'price': price,
+      'mrp': mrp,
+      'stockQty': stockQty,
+      'stockStatus': stockStatus,
+      'isActive': isActive,
+    };
+  }
 }

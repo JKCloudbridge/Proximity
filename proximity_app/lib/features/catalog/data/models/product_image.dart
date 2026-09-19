@@ -11,4 +11,7 @@ class ProductImage {
   factory ProductImage.fromJson(Map<String, dynamic> json) {
     return ProductImage(id: json['id'] as String, imageUrl: json['imageUrl'] as String);
   }
+
+  // Sprint 15 -- local cache round-trip (core/cache), not the network.
+  Map<String, dynamic> toJson() => {'id': id, 'imageUrl': imageUrl};
 }

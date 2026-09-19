@@ -49,4 +49,17 @@ class ShopProduct {
       variants: (json['variants'] as List<dynamic>).map((e) => ProductVariant.fromJson(e as Map<String, dynamic>)).toList(),
     );
   }
+
+  // Sprint 15 -- local cache round-trip (core/cache), not the network.
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'shopId': shopId,
+      'subCategoryId': subCategoryId,
+      'name': name,
+      'isVeg': isVeg,
+      'images': images.map((i) => i.toJson()).toList(),
+      'variants': variants.map((v) => v.toJson()).toList(),
+    };
+  }
 }

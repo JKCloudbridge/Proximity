@@ -97,6 +97,23 @@ dependencies:
   # directly for date formatting, rather than relying on an undeclared
   # transitive import.
   intl: ^0.20.2
+  # Sprint 15 -- the local caching layer named "no Drift caching yet" since
+  # as early as Sprint 1's own comments (core/providers.dart), finally
+  # scheduled. All three versions verified live against pub.dev before
+  # adding (this project's standing rule): drift 2.35.0 and drift_dev 2.35.0
+  # are current and mutually compatible (drift_dev declares `>=2.30.0
+  # <2.36.0` on drift). `sqlite3_flutter_libs`, the package every older
+  # drift tutorial names, is now published as `0.6.0+eol` -- pub.dev's own
+  # listing says it's obsolete since sqlite3 3.x and to migrate off it, so
+  # this deliberately does NOT add it. `drift_flutter` (0.3.1, verified
+  # separately) is the current officially-documented replacement
+  # (drift.simonbinder.eu/setup) -- its `driftDatabase(native:
+  # DriftNativeOptions(databaseDirectory: ...))` helper handles the
+  # Android-specific "sqlite3 wants /tmp, which Android forbids" workaround
+  # itself, so no manual NativeDatabase/native-library wiring is needed here.
+  drift: ^2.35.0
+  drift_flutter: ^0.3.1
+  path_provider: ^2.1.6
 
 dev_dependencies:
   flutter_test:
@@ -110,6 +127,10 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   build_runner: ^2.15.1
   envied_generator: ^1.3.8
+  # Sprint 15 -- codegen for AppDatabase (core/cache/app_database.dart).
+  # 2.35.0 verified live against pub.dev, matching the `drift` version above
+  # exactly (drift_dev's own compatibility range requires this).
+  drift_dev: ^2.35.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

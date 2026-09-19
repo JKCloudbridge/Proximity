@@ -47,4 +47,22 @@ class ProductDetail {
       shopLogoUrl: shop['logoUrl'] as String?,
     );
   }
+
+  // Sprint 15 -- local cache round-trip (core/cache), not the network.
+  // Nests `shopName`/`shopLogoUrl` back under a `shop` object, matching the
+  // exact shape `fromJson` above expects, so a cache-decoded row parses
+  // through the identical code path as a fresh network response.
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'shopId': shopId,
+      'name': name,
+      'description': description,
+      'isVeg': isVeg,
+      'infoMessage': infoMessage,
+      'images': images.map((i) => i.toJson()).toList(),
+      'variants': variants.map((v) => v.toJson()).toList(),
+      'shop': {'name': shopName, 'logoUrl': shopLogoUrl},
+    };
+  }
 }
