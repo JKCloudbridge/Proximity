@@ -4,8 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import 'auth_provider.dart';
 
-/// 6-digit code entry, pushed from LoginScreen after sendEmailOtp succeeds.
-/// Same two-step flow as Baker Ally's email_otp_screen.dart.
+/// 6-digit code entry, pushed from SignUpScreen after signUpWithPassword
+/// succeeds -- confirms the new account (auth_repository.dart's
+/// verifySignupOtp) and signs the user in. Sprint 14: no longer the
+/// passwordless sign-in step it used to be (see login_screen.dart's own
+/// header for that history) -- signup-confirmation only now.
 class EmailOtpScreen extends ConsumerStatefulWidget {
   const EmailOtpScreen({super.key, required this.email});
 
@@ -37,7 +40,7 @@ class _EmailOtpScreenState extends ConsumerState<EmailOtpScreen> {
       _error = null;
     });
     try {
-      await ref.read(authProvider.notifier).verifyEmailOtp(email: widget.email, token: code);
+      await ref.read(authProvider.notifier).verifySignupOtp(email: widget.email, token: code);
       // authProvider's onAuthStateChange listener + GoRouter's redirect
       // handle navigation from here -- pop back to wherever LoginScreen
       // was pushed from, the redirect takes it away from /login.

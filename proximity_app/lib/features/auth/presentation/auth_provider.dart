@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // StateNotifier/StateNotifierProvider moved to this explicit import in
 // Riverpod 3.x -- the plain Notifier/NotifierProvider in the main package
@@ -67,7 +68,23 @@ class AuthNotifier extends StateNotifier<AuthSessionState> {
   bool _wasLoggedIn = false;
 
   Future<void> _sync() async {
-    await _repository.syncSessionToStorage();
+    // Sprint 14 fix: this call was the one thing in this function with no
+    // try/catch, unlike hydrateProfile() below (deliberately tolerant --
+    // "a dropped connection shouldn't force a logout"). flutter_secure_
+    // storage has real, documented PlatformExceptions on some Android
+    // Keystore configurations -- if that write throws, it used to escape
+    // this function uncaught (called from a raw stream listener with
+    // nothing catching it), which meant `state` never updated to
+    // isLoggedIn: true and `isLoading` stayed stuck at its default `true`
+    // forever -- app_router.dart's redirect refuses to act at all while
+    // isLoading is true, so a real, successful Supabase sign-in would
+    // silently never take the user anywhere. Never caught until this
+    // sprint's first real sign-in on a physical device.
+    try {
+      await _repository.syncSessionToStorage();
+    } catch (err) {
+      debugPrint('AuthNotifier._sync: syncSessionToStorage failed: $err');
+    }
     final session = _repository.currentSession;
 
     if (session == null) {
@@ -102,10 +119,21 @@ class AuthNotifier extends StateNotifier<AuthSessionState> {
     }
   }
 
-  Future<void> sendEmailOtp(String email) => _repository.sendEmailOtp(email);
+  Future<void> signUpWithPassword({required String email, required String password, String? fullName, String? phone}) =>
+      _repository.signUpWithPassword(email: email, password: password, fullName: fullName, phone: phone);
 
-  Future<void> verifyEmailOtp({required String email, required String token}) =>
-      _repository.verifyEmailOtp(email: email, token: token);
+  Future<void> verifySignupOtp({required String email, required String token}) =>
+      _repository.verifySignupOtp(email: email, token: token);
+
+  Future<void> signInWithPassword({required String email, required String password}) =>
+      _repository.signInWithPassword(email: email, password: password);
+
+  Future<void> sendPasswordResetOtp(String email) => _repository.sendPasswordResetOtp(email);
+
+  Future<void> verifyPasswordResetOtp({required String email, required String token}) =>
+      _repository.verifyPasswordResetOtp(email: email, token: token);
+
+  Future<void> updatePassword(String newPassword) => _repository.updatePassword(newPassword);
 
   Future<void> signInWithGoogle() => _repository.signInWithGoogle();
 

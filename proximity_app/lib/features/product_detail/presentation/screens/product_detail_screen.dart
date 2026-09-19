@@ -210,8 +210,13 @@ class _ProductBody extends ConsumerWidget {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Added to cart'),
+          content: const Text('Added to cart'),
           action: SnackBarAction(label: 'View cart', onPressed: () => context.go('/cart')),
+          // Sprint 14 fix: Flutter's own default SnackBar duration is 4s,
+          // shortened to 3s per feedback -- the cart tab's own badge count
+          // already confirms the add happened, so this is just a transient
+          // toast, not the only signal of success.
+          duration: const Duration(seconds: 3),
         ),
       );
     } on DioException catch (err) {

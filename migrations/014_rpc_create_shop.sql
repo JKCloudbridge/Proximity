@@ -90,13 +90,21 @@ BEGIN
   WHERE id = p_owner_id AND role <> 'admin';
 
   IF p_business_hours IS NOT NULL THEN
+    -- Sprint 14 fix: this project's whole backend uses camelCase JSON keys
+    -- everywhere (every route response, every request schema, including
+    -- shop-creation-form.tsx's own BusinessHourRow this JSONB is built
+    -- from) -- these three keys were the one place still reading
+    -- snake_case, so every real submission silently produced NULL
+    -- opens_at/closes_at + is_closed=false for every weekday, which then
+    -- failed shop_business_hours' own CHECK constraint. Never caught until
+    -- this sprint's first real POST /shop/shops against a live database.
     INSERT INTO public.shop_business_hours (shop_id, weekday, opens_at, closes_at, is_closed)
     SELECT
       v_shop_id,
       (elem->>'weekday')::smallint,
-      NULLIF(elem->>'opens_at', '')::time,
-      NULLIF(elem->>'closes_at', '')::time,
-      COALESCE((elem->>'is_closed')::boolean, false)
+      NULLIF(elem->>'opensAt', '')::time,
+      NULLIF(elem->>'closesAt', '')::time,
+      COALESCE((elem->>'isClosed')::boolean, false)
     FROM jsonb_array_elements(p_business_hours) elem;
   END IF;
 

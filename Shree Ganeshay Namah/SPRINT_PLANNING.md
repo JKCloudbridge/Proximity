@@ -157,13 +157,13 @@ Unchanged from v1 except iOS is no longer front-loaded as urgent:
 | Node.js 20 LTS+ | Next.js website |
 | Supabase CLI | Migrations, secrets, deploy |
 | Deno | Local Edge Function testing |
-| Xcode + CocoaPods | **On a Mac, when Sprint 14 arrives** — not needed before then |
+| Xcode + CocoaPods | **On a Mac, when Sprint 16 arrives** — not needed before then |
 
 ### 3.2 Cloud accounts
 
 - **Supabase** — two projects, `proximity-staging` / `proximity-prod`.
 - **Google Cloud project** — OAuth clients (Android SHA-1 + iOS bundle ID), Geocoding API + Places Autocomplete (address entry, lat/lng resolution), Maps SDK if the map-view backlog item (§10) is built.
-- **Apple Developer Program** ($99/yr) — register in Sprint 0, used in Sprint 14. Includes Sign in with Apple capability (§1.1).
+- **Apple Developer Program** ($99/yr) — register in Sprint 0, used in Sprint 16. Includes Sign in with Apple capability (§1.1).
 - **Firebase** — FCM push, Crashlytics, Analytics; iOS needs an APNs Auth Key uploaded to Firebase.
 - **Razorpay** — test keys, evaluate Route for future split payouts.
 - **PayU** — test/sandbox keys, confirm current Flutter SDK maturity and marketplace-split product before Sprint 8.
@@ -636,7 +636,17 @@ Unchanged from v1 except **the rider network moves out of "explicitly deferred" 
 - Design-system audit against §6, accessibility pass, empty/error states, Crashlytics + Sentry, image caching/list virtualization, `Platform.isAndroid`/`isIOS` centralization audit (§1.1's "keep it organised" checked against actual code, not just planned).
 - **Exit criteria:** no untriaged crash-reporting gaps, no unhandled empty states on any list screen.
 
-### Sprint 14 (2 weeks) — iOS build & store submission
+### Sprint 14 (2 weeks) — Password auth & account recovery
+- **Inserted after the original plan; bumped the previously-numbered "iOS build & store submission" sprint to Sprint 15 below rather than reusing its number.** Replaces the passwordless "email OTP is how you sign in every time" flow with: sign-up (email + password, confirmed by a 6-digit OTP), password sign-in for returning users, and an OTP-verified forgot-password/reset flow. Session persistence (stay signed in until a manual sign-out) was already supabase_flutter's default behavior — confirmed, not newly built.
+- **Exit criteria:** a new user can sign up with email+password and confirm via OTP; a returning user signs in with just email+password; a user who forgets their password can reset it via an emailed OTP code without contacting support.
+
+### Sprint 15 (2 weeks) — Local caching layer & real Categories tab
+- **Inserted after the original plan, same reason as Sprint 14; bumped "iOS build & store submission" to Sprint 16 below rather than reusing its number.** Two gaps surfaced by Sprint 14's own live testing: (1) this app has no local caching layer anywhere — every screen does a live network round-trip on every load, a deliberately-deferred concern this codebase's own comments have flagged by name ("no Drift caching yet") since as early as Sprint 1; (2) the Categories tab is still Sprint 1's original placeholder (`PlaceholderScreen(title: 'Categories')`, literally rendering "Categories -- coming soon") — Home/Cart/Order Again all graduated from that same placeholder in their own sprints, Categories never did.
+- **Caching, scoped deliberately narrow, not full offline-first:** cache-then-revalidate (stale-while-revalidate) on the read-heavy, most-visited screens only — Categories, Home's three sections (shops near you, recommended, frequently bought), and shop/product browsing. A warm cache paints instantly while a background refresh silently reconciles it. Cart, checkout, order history, addresses, account, and every write path stay live-network-only, unchanged — correctness matters more than perceived speed there, and showing a stale cart total or stale order status would be a real bug, not a UX win. `drift` is the concrete choice, since it's what this codebase's own prior comments already named as the intended tool.
+- **Categories tab:** replaces the placeholder with a real grid of the 20 seeded categories; tapping one shows nearby shops carrying that category (reusing `GET /v1/shops/near?categoryId=`, already built for Home's own category-chip filtering).
+- **Exit criteria:** revisiting Home/Categories/shop-detail/product-detail on a warm cache renders instantly with no loading spinner, then reconciles in place if the network disagrees; the Categories tab shows real categories and real filtered shop results, not a placeholder.
+
+### Sprint 16 (2 weeks) — iOS build & store submission
 - Xcode build/sign pipeline finalized (Mac or Codemagic, decided when this sprint starts per §1.1), TestFlight beta.
 - Play Store listing + Data Safety form, Play Internal Testing.
 - App Store listing, **Sign in with Apple compliance re-check**, privacy policy, staged rollout plan.
@@ -650,7 +660,7 @@ Original 19-item brief, unchanged from v1 (§11 there), plus this session's addi
 
 | # | Requirement | Addressed in |
 |---|---|---|
-| 1 | iOS — stop treating as a constant risk, scope into one sprint, keep code organised | §1.1, Sprint 14 |
+| 1 | iOS — stop treating as a constant risk, scope into one sprint, keep code organised | §1.1, Sprint 16 |
 | 2 | Both delivery paths; no fee for shop-fulfilled; admin controls the fee; roles planned; RPC-organized access control | §1.2, §1.3, §4.4, §4.6, §5 entire section |
 | 3 | Draft every sprint now | §11 |
 | 4 | PayU vs Razorpay evaluation, pay-at-shop for shop-fulfilled orders | §1.4 |
@@ -662,7 +672,7 @@ Original 19-item brief, unchanged from v1 (§11 there), plus this session's addi
 ## 13. Open decisions log <a name="13-open-decisions"></a>
 
 **Decided this session:**
-- iOS handled on a Mac (own or cloud CI) when Sprint 14 arrives — not an ongoing risk to manage.
+- iOS handled on a Mac (own or cloud CI) when Sprint 16 arrives — not an ongoing risk to manage.
 - Roles: `buyer`/`shop_owner`/`rider`/`admin` + shop-scoped `shop_team_members` (`owner`/`staff`/`delivery`).
 - Both shop-self-delivery and platform riders, shop-selectable via `delivery_mode`.
 - No delivery fee for self-fulfilled orders; fee is admin-controlled platform setting for rider-fulfilled ones.

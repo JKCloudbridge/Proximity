@@ -23,7 +23,19 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
     return c.json({ error: { code: "UNAUTHORIZED", message: "Invalid or expired token" } }, 401);
   }
 
-  c.set("user", data.user);
+  // Sprint 14 fix: getUser() returns app_metadata exactly as persisted on
+  // auth.users (raw_app_meta_data) -- a real, documented Supabase
+  // limitation is that this does NOT include claims the Custom Access
+  // Token Hook (migrations/004) injects only into the signed JWT payload
+  // itself, never written back to the database. requireRole()/
+  // adminMiddleware below need that hook-injected role claim, so it's
+  // decoded directly off the token this request actually carries -- a
+  // decode only, not a second signature check, since getUser() above
+  // already verified this exact token is authentic.
+  const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+  const user = { ...data.user, app_metadata: { ...data.user.app_metadata, ...payload.app_metadata } };
+
+  c.set("user", user);
   await next();
 });
 

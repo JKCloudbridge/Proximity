@@ -37,7 +37,11 @@ class _PreviouslyBoughtTileState extends ConsumerState<PreviouslyBoughtTile> {
     try {
       await ref.read(cartRepositoryProvider).addItem(widget.product.variantId);
       ref.invalidate(cartProvider);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Added to cart')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Added to cart'), duration: Duration(seconds: 3)),
+        );
+      }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not add: $e')));
     } finally {
