@@ -106,12 +106,12 @@ class _WishlistTile extends ConsumerWidget {
                     child: Container(
                       decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
                       child: IconButton(
+                        tooltip: 'Remove from wishlist',
                         icon: const Icon(Icons.close, size: 16),
                         onPressed: () async {
                           await ref.read(wishlistRepositoryProvider).remove(item.productId);
                           ref.invalidate(wishlistProvider);
                         },
-                        tooltip: 'Remove',
                         visualDensity: VisualDensity.compact,
                       ),
                     ),

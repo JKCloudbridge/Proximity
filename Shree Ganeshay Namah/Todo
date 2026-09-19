@@ -1,0 +1,1 @@
+- Update the `ADMIN_WEB_ORIGIN` Edge Function secret once `proximity_web` is deployed somewhere real (Vercel, etc.) — it's currently hardcoded to `http://localhost:3000` for local dev, and CORS on `/v1/shop/*`/`/v1/admin/*` will silently break for the real deployed origin until this is updated. Not urgent while testing locally.

@@ -54,6 +54,7 @@ ALTER TABLE product_variants ENABLE ROW LEVEL SECURITY;
 -- Same three-condition shape as products_select_public (017) plus the
 -- variant's own is_active -- a product can stay listed with one inactive
 -- (discontinued) variant among several active ones.
+DROP POLICY IF EXISTS product_variants_select_public ON product_variants;
 CREATE POLICY product_variants_select_public ON product_variants
   FOR SELECT USING (
     is_active = true
@@ -63,6 +64,7 @@ CREATE POLICY product_variants_select_public ON product_variants
     )
   );
 
+DROP POLICY IF EXISTS product_variants_select_team ON product_variants;
 CREATE POLICY product_variants_select_team ON product_variants
   FOR SELECT USING (
     product_id IN (
@@ -70,6 +72,7 @@ CREATE POLICY product_variants_select_team ON product_variants
     )
   );
 
+DROP POLICY IF EXISTS product_variants_team_write ON product_variants;
 CREATE POLICY product_variants_team_write ON product_variants
   FOR ALL USING (
     product_id IN (
@@ -84,6 +87,7 @@ CREATE POLICY product_variants_team_write ON product_variants
     )
   );
 
+DROP POLICY IF EXISTS product_variants_admin_all ON product_variants;
 CREATE POLICY product_variants_admin_all ON product_variants
   FOR ALL USING (public.get_role() = 'admin')
   WITH CHECK (public.get_role() = 'admin');

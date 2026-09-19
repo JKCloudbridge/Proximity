@@ -45,18 +45,68 @@ class AuthRepository {
 
   Session? get currentSession => _supabase.auth.currentSession;
 
-  /// Sends a 6-digit OTP code to [email] (Supabase's email OTP template).
-  /// No Google/Apple account required -- the no-setup fallback, same role
-  /// it plays in Baker Ally (added there because Google OAuth "Access
-  /// blocked" errors are common until the Cloud consent screen is
-  /// published -- expect to hit that here too before Sprint 1's Google
-  /// credentials are fully live).
-  Future<void> sendEmailOtp(String email) {
-    return _supabase.auth.signInWithOtp(email: email);
+  /// Sprint 14: sign-up is email+password, confirmed by a 6-digit OTP code
+  /// (Supabase's "Confirm signup" email/OTP template) -- `signUp` creates
+  /// the `auth.users` row but does **not** sign the caller in; the account
+  /// stays unconfirmed until [verifySignupOtp] succeeds. Replaces the old
+  /// passwordless "email OTP is how you sign in every time" flow (Baker
+  /// Ally's own no-Google-consent-screen fallback) now that password
+  /// sign-in below covers that no-setup-required role instead.
+  /// [fullName]/[phone] are optional profile fields captured on the sign-up
+  /// form -- they travel as `signUp`'s `data` map (arbitrary user metadata,
+  /// landing in `auth.users.raw_user_meta_data`), the same mechanism
+  /// proximity_web's own signup page already uses for `full_name`. Kept
+  /// distinct from `signUp`'s own `phone` parameter, which is GoTrue's
+  /// phone-based-OTP-auth field -- a different auth mechanism this app
+  /// doesn't use, not a place to stash a profile phone number. Read back out
+  /// of `user_metadata` by `POST /v1/auth/me` (routes/auth.ts) the one time
+  /// it creates the `public.users` row.
+  Future<void> signUpWithPassword({required String email, required String password, String? fullName, String? phone}) {
+    return _supabase.auth.signUp(
+      email: email,
+      password: password,
+      data: {
+        if (fullName != null && fullName.isNotEmpty) 'full_name': fullName,
+        if (phone != null && phone.isNotEmpty) 'phone': phone,
+      },
+    );
   }
 
-  Future<void> verifyEmailOtp({required String email, required String token}) {
-    return _supabase.auth.verifyOTP(email: email, token: token, type: OtpType.email);
+  /// Confirms the account [signUpWithPassword] created and, on success,
+  /// signs the user in -- same as Supabase's own documented signup-OTP
+  /// contract.
+  Future<void> verifySignupOtp({required String email, required String token}) {
+    return _supabase.auth.verifyOTP(email: email, token: token, type: OtpType.signup);
+  }
+
+  /// Sprint 14: returning users sign in with the password they set at
+  /// sign-up -- no email round trip needed once an account is confirmed.
+  Future<void> signInWithPassword({required String email, required String password}) {
+    return _supabase.auth.signInWithPassword(email: email, password: password);
+  }
+
+  /// Forgot-password flow, step 1 of 3: triggers Supabase's password-
+  /// recovery email (Dashboard's "Reset Password" template -- needs the
+  /// same `{{ .Token }}` edit the old Magic Link template needed, see
+  /// Sprint 14.md) carrying a 6-digit OTP.
+  Future<void> sendPasswordResetOtp(String email) {
+    return _supabase.auth.resetPasswordForEmail(email);
+  }
+
+  /// Step 2 of 3: verifying a recovery-type OTP signs the caller into a
+  /// real session -- Supabase's documented prerequisite for [updatePassword]
+  /// below to actually take effect on `auth.users`.
+  Future<void> verifyPasswordResetOtp({required String email, required String token}) {
+    return _supabase.auth.verifyOTP(email: email, token: token, type: OtpType.recovery);
+  }
+
+  /// Step 3 of 3: sets the new password on the session [verifyPasswordResetOtp]
+  /// just created. Deliberately leaves the user signed in afterward -- same
+  /// "stay signed in until a manual sign-out" contract every other sign-in
+  /// path in this app keeps, not a special case that force-logs-out after a
+  /// reset.
+  Future<void> updatePassword(String newPassword) {
+    return _supabase.auth.updateUser(UserAttributes(password: newPassword));
   }
 
   /// GoogleSignIn.instance.initialize() must have already completed

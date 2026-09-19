@@ -27,6 +27,7 @@ CREATE INDEX IF NOT EXISTS idx_wishlists_product_id ON wishlists(product_id);
 
 ALTER TABLE wishlists ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS wishlists_all_own ON wishlists;
 CREATE POLICY wishlists_all_own ON wishlists
   FOR ALL USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());

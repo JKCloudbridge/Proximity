@@ -43,6 +43,7 @@ ALTER TABLE order_groups ENABLE ROW LEVEL SECURITY;
 -- Own-user data (§5.2), same shape as addresses/carts/wishlists. A backstop
 -- only (§5.1) -- routes/checkout.ts's authMiddleware plus explicit user_id
 -- filtering is the live enforcement.
+DROP POLICY IF EXISTS order_groups_all_own ON order_groups;
 CREATE POLICY order_groups_all_own ON order_groups
   FOR ALL USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());

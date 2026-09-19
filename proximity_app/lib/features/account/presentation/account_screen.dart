@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/theme/app_theme.dart';
 import '../../auth/presentation/auth_provider.dart';
 import '../../shop_orders/presentation/providers/shop_orders_providers.dart';
 
@@ -96,8 +97,8 @@ class AccountScreen extends ConsumerWidget {
             ),
           const Divider(height: 1),
           ListTile(
-            leading: const Icon(Icons.logout, color: Colors.red),
-            title: const Text('Sign out', style: TextStyle(color: Colors.red)),
+            leading: const Icon(Icons.logout, color: AppColors.urgent),
+            title: const Text('Sign out', style: TextStyle(color: AppColors.urgent)),
             onTap: () async {
               await ref.read(authProvider.notifier).signOut();
               if (context.mounted) context.go('/');

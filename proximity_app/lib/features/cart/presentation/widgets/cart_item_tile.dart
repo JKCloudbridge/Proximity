@@ -88,18 +88,23 @@ class _CartItemTileState extends ConsumerState<CartItemTile> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _stepperButton(icon: widget.item.quantity <= 1 ? Icons.delete_outline : Icons.remove, onTap: () => _changeQuantity(widget.item.quantity - 1)),
+        _stepperButton(
+          icon: widget.item.quantity <= 1 ? Icons.delete_outline : Icons.remove,
+          tooltip: widget.item.quantity <= 1 ? 'Remove' : 'Decrease quantity',
+          onTap: () => _changeQuantity(widget.item.quantity - 1),
+        ),
         SizedBox(width: 28, child: Center(child: Text('${widget.item.quantity}', style: const TextStyle(fontWeight: FontWeight.w700)))),
-        _stepperButton(icon: Icons.add, onTap: () => _changeQuantity(widget.item.quantity + 1)),
+        _stepperButton(icon: Icons.add, tooltip: 'Increase quantity', onTap: () => _changeQuantity(widget.item.quantity + 1)),
       ],
     );
   }
 
-  Widget _stepperButton({required IconData icon, required VoidCallback onTap}) {
+  Widget _stepperButton({required IconData icon, required String tooltip, required VoidCallback onTap}) {
     return SizedBox(
       width: 32,
       height: 32,
       child: IconButton(
+        tooltip: tooltip,
         padding: EdgeInsets.zero,
         icon: Icon(icon, size: 18, color: icon == Icons.delete_outline ? AppColors.urgent : AppColors.brand),
         onPressed: _busy ? null : onTap,

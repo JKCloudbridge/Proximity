@@ -26,17 +26,20 @@ CREATE INDEX IF NOT EXISTS idx_shop_sub_categories_category_id ON shop_sub_categ
 
 ALTER TABLE shop_sub_categories ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS shop_sub_categories_select_public ON shop_sub_categories;
 CREATE POLICY shop_sub_categories_select_public ON shop_sub_categories
   FOR SELECT USING (
     is_active = true AND shop_id IN (SELECT id FROM shops WHERE status = 'approved')
   );
 
+DROP POLICY IF EXISTS shop_sub_categories_select_team ON shop_sub_categories;
 CREATE POLICY shop_sub_categories_select_team ON shop_sub_categories
   FOR SELECT USING (
     shop_id IN (SELECT shop_id FROM shop_team_members WHERE user_id = auth.uid())
   );
 
 -- Owner + staff manage the catalog taxonomy (§5.3's "Add/edit catalog" row).
+DROP POLICY IF EXISTS shop_sub_categories_team_write ON shop_sub_categories;
 CREATE POLICY shop_sub_categories_team_write ON shop_sub_categories
   FOR ALL USING (
     shop_id IN (SELECT shop_id FROM shop_team_members WHERE user_id = auth.uid() AND member_role IN ('owner','staff'))
@@ -45,6 +48,7 @@ CREATE POLICY shop_sub_categories_team_write ON shop_sub_categories
     shop_id IN (SELECT shop_id FROM shop_team_members WHERE user_id = auth.uid() AND member_role IN ('owner','staff'))
   );
 
+DROP POLICY IF EXISTS shop_sub_categories_admin_all ON shop_sub_categories;
 CREATE POLICY shop_sub_categories_admin_all ON shop_sub_categories
   FOR ALL USING (public.get_role() = 'admin')
   WITH CHECK (public.get_role() = 'admin');

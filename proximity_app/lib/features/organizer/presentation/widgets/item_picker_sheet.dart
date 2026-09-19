@@ -67,7 +67,7 @@ class _ItemPickerSheetState extends ConsumerState<_ItemPickerSheet> {
               child: Row(
                 children: [
                   Expanded(child: Text('Add items', style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
-                  IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
+                  IconButton(tooltip: 'Close', icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
                 ],
               ),
             ),
@@ -177,12 +177,14 @@ class _ProductRow extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
+                    tooltip: 'Decrease quantity',
                     visualDensity: VisualDensity.compact,
                     icon: const Icon(Icons.remove_circle_outline, size: 20),
                     onPressed: quantity > 0 ? () => onChanged(quantity - 1) : null,
                   ),
                   SizedBox(width: 20, child: Text('$quantity', textAlign: TextAlign.center)),
                   IconButton(
+                    tooltip: 'Increase quantity',
                     visualDensity: VisualDensity.compact,
                     icon: const Icon(Icons.add_circle_outline, size: 20),
                     onPressed: quantity < 99 ? () => onChanged(quantity + 1) : null,

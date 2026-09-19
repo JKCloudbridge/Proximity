@@ -20,11 +20,13 @@ CREATE INDEX IF NOT EXISTS idx_shop_media_shop_id ON shop_media(shop_id);
 
 ALTER TABLE shop_media ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS shop_media_select_public ON shop_media;
 CREATE POLICY shop_media_select_public ON shop_media
   FOR SELECT USING (
     shop_id IN (SELECT id FROM shops WHERE status = 'approved')
   );
 
+DROP POLICY IF EXISTS shop_media_select_team ON shop_media;
 CREATE POLICY shop_media_select_team ON shop_media
   FOR SELECT USING (
     shop_id IN (SELECT shop_id FROM shop_team_members WHERE user_id = auth.uid())
@@ -34,6 +36,7 @@ CREATE POLICY shop_media_select_team ON shop_media
 -- is owner+staff; shop photos are treated the same, not owner-only, since
 -- they're closer to "keeping the storefront current" than a settings
 -- change).
+DROP POLICY IF EXISTS shop_media_team_write ON shop_media;
 CREATE POLICY shop_media_team_write ON shop_media
   FOR ALL USING (
     shop_id IN (SELECT shop_id FROM shop_team_members WHERE user_id = auth.uid() AND member_role IN ('owner','staff'))
@@ -42,6 +45,7 @@ CREATE POLICY shop_media_team_write ON shop_media
     shop_id IN (SELECT shop_id FROM shop_team_members WHERE user_id = auth.uid() AND member_role IN ('owner','staff'))
   );
 
+DROP POLICY IF EXISTS shop_media_admin_all ON shop_media;
 CREATE POLICY shop_media_admin_all ON shop_media
   FOR ALL USING (public.get_role() = 'admin')
   WITH CHECK (public.get_role() = 'admin');

@@ -157,13 +157,13 @@ Unchanged from v1 except iOS is no longer front-loaded as urgent:
 | Node.js 20 LTS+ | Next.js website |
 | Supabase CLI | Migrations, secrets, deploy |
 | Deno | Local Edge Function testing |
-| Xcode + CocoaPods | **On a Mac, when Sprint 14 arrives** — not needed before then |
+| Xcode + CocoaPods | **On a Mac, when Sprint 16 arrives** — not needed before then |
 
 ### 3.2 Cloud accounts
 
 - **Supabase** — two projects, `proximity-staging` / `proximity-prod`.
 - **Google Cloud project** — OAuth clients (Android SHA-1 + iOS bundle ID), Geocoding API + Places Autocomplete (address entry, lat/lng resolution), Maps SDK if the map-view backlog item (§10) is built.
-- **Apple Developer Program** ($99/yr) — register in Sprint 0, used in Sprint 14. Includes Sign in with Apple capability (§1.1).
+- **Apple Developer Program** ($99/yr) — register in Sprint 0, used in Sprint 16. Includes Sign in with Apple capability (§1.1).
 - **Firebase** — FCM push, Crashlytics, Analytics; iOS needs an APNs Auth Key uploaded to Firebase.
 - **Razorpay** — test keys, evaluate Route for future split payouts.
 - **PayU** — test/sandbox keys, confirm current Flutter SDK maturity and marketplace-split product before Sprint 8.
@@ -636,7 +636,17 @@ Unchanged from v1 except **the rider network moves out of "explicitly deferred" 
 - Design-system audit against §6, accessibility pass, empty/error states, Crashlytics + Sentry, image caching/list virtualization, `Platform.isAndroid`/`isIOS` centralization audit (§1.1's "keep it organised" checked against actual code, not just planned).
 - **Exit criteria:** no untriaged crash-reporting gaps, no unhandled empty states on any list screen.
 
-### Sprint 14 (2 weeks) — iOS build & store submission
+### Sprint 14 (2 weeks) — Password auth & account recovery
+- **Inserted after the original plan; bumped the previously-numbered "iOS build & store submission" sprint to Sprint 15 below rather than reusing its number.** Replaces the passwordless "email OTP is how you sign in every time" flow with: sign-up (email + password, confirmed by a 6-digit OTP), password sign-in for returning users, and an OTP-verified forgot-password/reset flow. Session persistence (stay signed in until a manual sign-out) was already supabase_flutter's default behavior — confirmed, not newly built.
+- **Exit criteria:** a new user can sign up with email+password and confirm via OTP; a returning user signs in with just email+password; a user who forgets their password can reset it via an emailed OTP code without contacting support.
+
+### Sprint 15 (2 weeks) — Local caching layer & real Categories tab
+- **Inserted after the original plan, same reason as Sprint 14; bumped "iOS build & store submission" to Sprint 16 below rather than reusing its number.** Two gaps surfaced by Sprint 14's own live testing: (1) this app has no local caching layer anywhere — every screen does a live network round-trip on every load, a deliberately-deferred concern this codebase's own comments have flagged by name ("no Drift caching yet") since as early as Sprint 1; (2) the Categories tab is still Sprint 1's original placeholder (`PlaceholderScreen(title: 'Categories')`, literally rendering "Categories -- coming soon") — Home/Cart/Order Again all graduated from that same placeholder in their own sprints, Categories never did.
+- **Caching, scoped deliberately narrow, not full offline-first:** cache-then-revalidate (stale-while-revalidate) on the read-heavy, most-visited screens only — Categories, Home's three sections (shops near you, recommended, frequently bought), and shop/product browsing. A warm cache paints instantly while a background refresh silently reconciles it. Cart, checkout, order history, addresses, account, and every write path stay live-network-only, unchanged — correctness matters more than perceived speed there, and showing a stale cart total or stale order status would be a real bug, not a UX win. `drift` is the concrete choice, since it's what this codebase's own prior comments already named as the intended tool.
+- **Categories tab:** replaces the placeholder with a real grid of the 20 seeded categories; tapping one shows nearby shops carrying that category (reusing `GET /v1/shops/near?categoryId=`, already built for Home's own category-chip filtering).
+- **Exit criteria:** revisiting Home/Categories/shop-detail/product-detail on a warm cache renders instantly with no loading spinner, then reconciles in place if the network disagrees; the Categories tab shows real categories and real filtered shop results, not a placeholder.
+
+### Sprint 16 (2 weeks) — iOS build & store submission
 - Xcode build/sign pipeline finalized (Mac or Codemagic, decided when this sprint starts per §1.1), TestFlight beta.
 - Play Store listing + Data Safety form, Play Internal Testing.
 - App Store listing, **Sign in with Apple compliance re-check**, privacy policy, staged rollout plan.
@@ -650,7 +660,7 @@ Original 19-item brief, unchanged from v1 (§11 there), plus this session's addi
 
 | # | Requirement | Addressed in |
 |---|---|---|
-| 1 | iOS — stop treating as a constant risk, scope into one sprint, keep code organised | §1.1, Sprint 14 |
+| 1 | iOS — stop treating as a constant risk, scope into one sprint, keep code organised | §1.1, Sprint 16 |
 | 2 | Both delivery paths; no fee for shop-fulfilled; admin controls the fee; roles planned; RPC-organized access control | §1.2, §1.3, §4.4, §4.6, §5 entire section |
 | 3 | Draft every sprint now | §11 |
 | 4 | PayU vs Razorpay evaluation, pay-at-shop for shop-fulfilled orders | §1.4 |
@@ -662,7 +672,7 @@ Original 19-item brief, unchanged from v1 (§11 there), plus this session's addi
 ## 13. Open decisions log <a name="13-open-decisions"></a>
 
 **Decided this session:**
-- iOS handled on a Mac (own or cloud CI) when Sprint 14 arrives — not an ongoing risk to manage.
+- iOS handled on a Mac (own or cloud CI) when Sprint 16 arrives — not an ongoing risk to manage.
 - Roles: `buyer`/`shop_owner`/`rider`/`admin` + shop-scoped `shop_team_members` (`owner`/`staff`/`delivery`).
 - Both shop-self-delivery and platform riders, shop-selectable via `delivery_mode`.
 - No delivery fee for self-fulfilled orders; fee is admin-controlled platform setting for rider-fulfilled ones.
@@ -698,6 +708,12 @@ Original 19-item brief, unchanged from v1 (§11 there), plus this session's addi
 - **Rider decline/timeout/reassignment** — a decline (`rpc_rider_decline_order`) or a 5-minute timeout (`rpc_expire_stale_rider_assignments`, `pg_cron` every 2 minutes) both immediately retry `rpc_assign_rider` with an exclusion list (`order_rider_declines`), falling back to the shop's existing manual retry when nobody's found. The shop's manual retry itself gained a `force` flag to reassign an order that already has a rider, covering the one gap not auto-detected: a rider gone quiet after accepting but before pickup. **Explicitly NOT solved:** once `out_for_delivery` (the rider already has the package), no mechanism — decline, timeout, or forced reassignment — can help; that's a real-world logistics escalation with no schema-expressible fix, not an oversight.
 - **Refunds on a cancelled, already-paid online order** — ledger-corrected (the `payout_due` is reversed) but **no real Razorpay refund is triggered**; still genuinely open below, since no real Razorpay account has ever existed to build that flow against (unchanged since Sprint 8).
 
+**Decided in Sprint 13** (full reasoning in `Sprint planning/Sprint 13.md` and in each new file's own header):
+- **§3.2's Sentry "Optional" line** — decided in for real, not left optional a further sprint: `proximity_backend`'s single existing `app.onError` handler now also reports to Sentry (`lib/sentry.ts`). Pinned to `npm:@sentry/deno@^8.55.2`, not npm's newer `latest` tag (`^10`), because Supabase's own current Edge-Functions Sentry guide pins `^8` specifically for their production Edge Runtime — Supabase, not this project, is the authority on what that runtime actually supports.
+- **Crashlytics is not simply "blocked on credentials" the way every other integration in this project has been** — a real, disclosed asymmetry, not an oversight. Manual `FirebaseOptions` (the path that made FCM a complete integration without the FlutterFire CLI, Sprint 11) does not substitute for the native Gradle plugin Crashlytics genuinely needs on Android, which only `flutterfire configure` adds. The Dart-side wiring (`lib/core/crash/crash_reporting_service.dart`) is built and ready regardless — it starts sending Dart-level reports the moment real Firebase config lands — but full native crash symbolication needs `flutterfire configure` (or an equivalent native-build change) as a **second**, additional step once a real Firebase project exists, not a given the way it was for FCM.
+- **Two real contrast gaps, measured precisely and flagged rather than fixed** — `AppColors.inkSoft` on `AppColors.cream` (4.36:1) and `AppColors.urgent` used as text on either cream or white (3.45–3.68:1) both fall short of WCAG AA's 4.5:1 normal-text minimum (the same colors used as icon/badge fills clear the separate, lower 3:1 non-text threshold comfortably). Not changed, deliberately: both are pinned §6 brand hex values shared verbatim by `proximity_web`'s `globals.css` — changing either is a brand-identity decision, not a "polish" one, and needs a real owner's decision (a recommended path — a separate, darker text-specific variant — is already in `Sprint 13.md`).
+- **§6's "tabular-nums on all price/quantity text"** had never actually been wired anywhere (checked directly, zero matches for `FontFeature`/`tabularFigures` across ~40 price-rendering call sites) — fixed once, centrally, in `app_theme.dart`'s own `TextTheme` construction rather than at each of those ~40 call sites individually.
+
 **Still genuinely open:**
 - Final bundle ID (needed Sprint 1).
 - Actual Razorpay/PayU commercial terms (needed before Sprint 8 starts, not before) — still no real Razorpay/PayU account exists as of Sprint 9 either (checked: `supabase projects list` shows no Proximity project, and no Razorpay keys exist), so Sprint 8's payment flow and this sprint's rider-assignment-off-a-real-confirmed-order dependency both remain unverified against live infrastructure.
@@ -706,3 +722,5 @@ Original 19-item brief, unchanged from v1 (§11 there), plus this session's addi
 - A radius cap on `rpc_assign_rider`'s nearest-rider search — none exists yet (finds the globally nearest available verified rider, however far); worth revisiting once a real deployment spans more than one service area.
 - ~~Rider re-assignment / cancellation-triggered ledger reversal~~ — built in Sprint 12 (see "Decided in Sprint 12," above), not just scheduled: `rpc_cancel_order`/`rpc_rider_decline_order`/`rpc_expire_stale_rider_assignments` are real, code-complete RPCs, unverified only in the "never run against live Postgres" sense every RPC in this project shares.
 - A real Razorpay refund on a cancelled, already-paid online order — Sprint 12's own ledger reversal corrects the internal bookkeeping (the platform no longer records owing the shop a payout) but never calls Razorpay to actually return the buyer's money. No sprint has this scheduled; needs a real Razorpay account to build against regardless (same still-open item above).
+- **New from Sprint 13:** whether `AppColors.inkSoft`/`AppColors.urgent` get a dedicated, darker text-specific variant (or stay as-is) — a real design decision with exact contrast numbers and a recommended path already measured, not yet made.
+- **New from Sprint 13:** a `flutterfire configure` run (or equivalent native-build change) once a real Firebase project exists — Crashlytics' own second precondition beyond the project simply existing, easy to forget is a separate step from what unblocked FCM.

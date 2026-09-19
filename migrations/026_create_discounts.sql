@@ -64,6 +64,7 @@ ALTER TABLE discounts ENABLE ROW LEVEL SECURITY;
 -- to enumerate every unreleased promo code is exactly the kind of thing
 -- this backstop should keep closed even on a path that doesn't currently
 -- exist.
+DROP POLICY IF EXISTS discounts_admin_all ON discounts;
 CREATE POLICY discounts_admin_all ON discounts
   FOR ALL USING (public.get_role() = 'admin')
   WITH CHECK (public.get_role() = 'admin');

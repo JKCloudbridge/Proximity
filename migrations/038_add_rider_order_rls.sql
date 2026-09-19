@@ -35,9 +35,11 @@
 -- 1 -- this is that class, finally implemented once a real consumer
 -- (Realtime) needs it to actually exist.
 
+DROP POLICY IF EXISTS orders_select_rider ON orders;
 CREATE POLICY orders_select_rider ON orders
   FOR SELECT USING (rider_id = (SELECT id FROM riders WHERE user_id = auth.uid()));
 
+DROP POLICY IF EXISTS order_status_history_select_rider ON order_status_history;
 CREATE POLICY order_status_history_select_rider ON order_status_history
   FOR SELECT USING (
     order_id IN (

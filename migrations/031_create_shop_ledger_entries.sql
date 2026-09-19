@@ -42,6 +42,7 @@ ALTER TABLE shop_ledger_entries ENABLE ROW LEVEL SECURITY;
 -- Shop-team data (§5.2), narrowed further by §5.3's permission matrix:
 -- "View sales summary / ledger / invoices" is owner + staff (read-only),
 -- never `delivery`. §8.4's shop-side ledger view is the consumer.
+DROP POLICY IF EXISTS shop_ledger_entries_select_shop_team ON shop_ledger_entries;
 CREATE POLICY shop_ledger_entries_select_shop_team ON shop_ledger_entries
   FOR SELECT USING (
     shop_id IN (
@@ -51,6 +52,7 @@ CREATE POLICY shop_ledger_entries_select_shop_team ON shop_ledger_entries
   );
 
 -- §8.6's platform-wide ledger view across all shops.
+DROP POLICY IF EXISTS shop_ledger_entries_admin_all ON shop_ledger_entries;
 CREATE POLICY shop_ledger_entries_admin_all ON shop_ledger_entries
   FOR ALL USING (public.get_role() = 'admin')
   WITH CHECK (public.get_role() = 'admin');

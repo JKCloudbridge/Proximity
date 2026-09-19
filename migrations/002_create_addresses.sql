@@ -25,6 +25,7 @@ CREATE INDEX IF NOT EXISTS idx_addresses_location ON addresses USING GIST(locati
 
 ALTER TABLE addresses ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS addresses_all_own ON addresses;
 CREATE POLICY addresses_all_own ON addresses
   FOR ALL USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());

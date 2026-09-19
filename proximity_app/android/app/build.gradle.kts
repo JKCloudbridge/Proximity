@@ -6,7 +6,12 @@ plugins {
 
 android {
     namespace = "com.proximity.proximity_app"
-    compileSdk = flutter.compileSdkVersion
+    // Bumped from flutter.compileSdkVersion (36) -- flutter_secure_storage's
+    // own plugin build now requires compileSdk 37, and Android Gradle Plugin
+    // requires the app module's compileSdk to be >= any dependency's. Real
+    // Gradle build failure, not a style preference -- see the "android-37 vs
+    // android-37.0" SDK-platform-folder-naming fix alongside this change.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

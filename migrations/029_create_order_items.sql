@@ -38,9 +38,11 @@ ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
 -- Scoped one hop through orders, same shape cart_items (023) uses through
 -- carts -- order_items has no user_id/shop_id of its own (by design, per
 -- §4.8's literal DDL above).
+DROP POLICY IF EXISTS order_items_select_own ON order_items;
 CREATE POLICY order_items_select_own ON order_items
   FOR SELECT USING (order_id IN (SELECT id FROM orders WHERE user_id = auth.uid()));
 
+DROP POLICY IF EXISTS order_items_select_shop_team ON order_items;
 CREATE POLICY order_items_select_shop_team ON order_items
   FOR SELECT USING (
     order_id IN (
@@ -49,6 +51,7 @@ CREATE POLICY order_items_select_shop_team ON order_items
     )
   );
 
+DROP POLICY IF EXISTS order_items_admin_all ON order_items;
 CREATE POLICY order_items_admin_all ON order_items
   FOR ALL USING (public.get_role() = 'admin')
   WITH CHECK (public.get_role() = 'admin');

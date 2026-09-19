@@ -24,21 +24,25 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('rider-documents', 'rider-documents', false)
 ON CONFLICT (id) DO NOTHING;
 
+DROP POLICY IF EXISTS rider_documents_insert_own ON storage.objects;
 CREATE POLICY rider_documents_insert_own ON storage.objects
   FOR INSERT WITH CHECK (
     bucket_id = 'rider-documents' AND (storage.foldername(name))[1] = auth.uid()::text
   );
 
+DROP POLICY IF EXISTS rider_documents_select_own ON storage.objects;
 CREATE POLICY rider_documents_select_own ON storage.objects
   FOR SELECT USING (
     bucket_id = 'rider-documents' AND (storage.foldername(name))[1] = auth.uid()::text
   );
 
+DROP POLICY IF EXISTS rider_documents_update_own ON storage.objects;
 CREATE POLICY rider_documents_update_own ON storage.objects
   FOR UPDATE USING (
     bucket_id = 'rider-documents' AND (storage.foldername(name))[1] = auth.uid()::text
   );
 
+DROP POLICY IF EXISTS rider_documents_delete_own ON storage.objects;
 CREATE POLICY rider_documents_delete_own ON storage.objects
   FOR DELETE USING (
     bucket_id = 'rider-documents' AND (storage.foldername(name))[1] = auth.uid()::text
@@ -49,6 +53,7 @@ CREATE POLICY rider_documents_delete_own ON storage.objects
 -- real workflow; if a document is wrong, the rider re-uploads via the same
 -- own-folder path, which overwrites via rpc_create_rider_profile's
 -- idempotent resubmit, migrations/015).
+DROP POLICY IF EXISTS rider_documents_select_admin ON storage.objects;
 CREATE POLICY rider_documents_select_admin ON storage.objects
   FOR SELECT USING (
     bucket_id = 'rider-documents' AND public.get_role() = 'admin'

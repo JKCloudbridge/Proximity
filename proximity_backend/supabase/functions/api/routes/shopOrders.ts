@@ -232,6 +232,26 @@ shopOrdersRoute.post(
     const orderId = c.req.param("orderId");
     const { reason } = c.req.valid("json");
 
+    // Sprint 13 fix -- caught by this sprint's own required independent
+    // re-review of Sprint 12. This route was the one shop-team write path in
+    // this file with no route-layer membership gate at all -- advance-status
+    // checks isShopMember and assign-rider checks isShopWriter before ever
+    // touching the DB (both above), but this handler went straight from the
+    // order lookup to the RPC call, relying entirely on rpc_cancel_order's
+    // own NOT_SHOP_MANAGER check deep inside a locked transaction. Not a
+    // security hole (the RPC's own check is real and correct), but an
+    // inconsistency with every other write route in this file, and it meant
+    // a caller with no relationship to this shop at all could still cause an
+    // order row to be locked (rpc_cancel_order's SELECT ... FOR UPDATE runs
+    // before its own authorization check, same as every other RPC in this
+    // codebase) before being told no. Same owner/staff tier as the manual
+    // rider-assignment retry above -- cancelling an order is an operational
+    // decision, not the broader "advance status" right §5.3 gives every
+    // member_role.
+    if (!(await isShopWriter(authUser.id, shopId))) {
+      return c.json({ error: { code: "NOT_SHOP_WRITER", message: "Only the shop owner or staff can do this" } }, 403);
+    }
+
     const [order] = await db.select({ shopId: orders.shopId }).from(orders).where(eq(orders.id, orderId)).limit(1);
     if (!order || order.shopId !== shopId) {
       return c.json({ error: { code: "ORDER_NOT_FOUND", message: "Order not found" } }, 404);

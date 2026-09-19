@@ -11,6 +11,42 @@ export const addressesRoute = new Hono<AuthEnv>();
 
 addressesRoute.use("/addresses*", authMiddleware);
 
+// `location` has no Drizzle column type (see schema.ts's header), so every
+// handler below that needs to return it does its own raw-SQL SELECT/RETURNING
+// with `ST_AsGeoJSON(location)::json AS location` and reshapes the
+// snake_case row into the camelCase shape the rest of this file's plain
+// Drizzle responses use -- same landmine routes/shops.ts's POST comment
+// flags for its own raw rows.
+type AddressRow = {
+  id: string;
+  user_id: string;
+  label: string | null;
+  line1: string;
+  line2: string | null;
+  city: string;
+  state: string;
+  pincode: string;
+  is_default: boolean;
+  created_at: string;
+  location: { type: "Point"; coordinates: [number, number] } | null;
+};
+
+function mapAddressRow(row: AddressRow) {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    label: row.label,
+    line1: row.line1,
+    line2: row.line2,
+    city: row.city,
+    state: row.state,
+    pincode: row.pincode,
+    isDefault: row.is_default,
+    createdAt: row.created_at,
+    location: row.location,
+  };
+}
+
 // Shape mirrors Baker Ally's routes/addresses.ts (list/create/update/delete),
 // which is a proven, correct-enough REST shape -- see the chat writeup for
 // the one real bug in that file (non-atomic default-address handling) that
@@ -32,12 +68,14 @@ addressesRoute.use("/addresses*", authMiddleware);
 
 addressesRoute.get("/addresses", async (c) => {
   const authUser = c.get("user");
-  const rows = await db
-    .select()
-    .from(addresses)
-    .where(eq(addresses.userId, authUser.id))
-    .orderBy(desc(addresses.isDefault), desc(addresses.createdAt));
-  return c.json({ data: rows });
+  const rows = (await db.execute(sql`
+    SELECT id, user_id, label, line1, line2, city, state, pincode, is_default, created_at,
+           ST_AsGeoJSON(location)::json AS location
+    FROM addresses
+    WHERE user_id = ${authUser.id}::uuid
+    ORDER BY is_default DESC, created_at DESC
+  `)) as unknown as AddressRow[];
+  return c.json({ data: rows.map(mapAddressRow) });
 });
 
 const latLngSchema = z.object({
@@ -76,27 +114,22 @@ addressesRoute.post("/addresses", zValidator("json", createAddressSchema), async
       .where(and(eq(addresses.userId, authUser.id), ne(addresses.isDefault, false)));
   }
 
-  const [created] = await db
-    .insert(addresses)
-    .values({
-      userId: authUser.id,
-      label: body.label ?? null,
-      line1: body.line1,
-      line2: body.line2 ?? null,
-      city: body.city,
-      state: body.state,
-      pincode: body.pincode,
-      isDefault: makeDefault,
-    })
-    .returning();
+  // `location` is NOT NULL with no default (migrations/002), so it has to
+  // be set in the same INSERT, not a follow-up UPDATE (a plain Drizzle
+  // insert can't set it at all -- see file header) -- the INSERT would
+  // otherwise fail the NOT NULL check before any UPDATE runs.
+  const [createdRow] = (await db.execute(sql`
+    INSERT INTO addresses (user_id, label, line1, line2, city, state, pincode, is_default, location)
+    VALUES (
+      ${authUser.id}::uuid, ${body.label ?? null}, ${body.line1}, ${body.line2 ?? null},
+      ${body.city}, ${body.state}, ${body.pincode}, ${makeDefault},
+      ST_SetSRID(ST_MakePoint(${body.location.lng}::double precision, ${body.location.lat}::double precision), 4326)::geography
+    )
+    RETURNING id, user_id, label, line1, line2, city, state, pincode, is_default, created_at,
+              ST_AsGeoJSON(location)::json AS location
+  `)) as unknown as AddressRow[];
 
-  // Set the geography column separately -- see file header on why this
-  // isn't part of the Drizzle insert above.
-  await db.execute(
-    sql`UPDATE addresses SET location = ST_SetSRID(ST_MakePoint(${body.location.lng}, ${body.location.lat}), 4326)::geography WHERE id = ${created.id}`,
-  );
-
-  return c.json({ data: created }, 201);
+  return c.json({ data: mapAddressRow(createdRow) }, 201);
 });
 
 const updateAddressSchema = z.object({
@@ -123,7 +156,7 @@ addressesRoute.patch("/addresses/:id", zValidator("json", updateAddressSchema), 
     return c.json({ error: { code: "ADDRESS_NOT_FOUND", message: "Address not found" } }, 404);
   }
 
-  const [updated] = await db
+  await db
     .update(addresses)
     .set({
       ...(body.label !== undefined ? { label: body.label } : {}),
@@ -133,8 +166,7 @@ addressesRoute.patch("/addresses/:id", zValidator("json", updateAddressSchema), 
       ...(body.state !== undefined ? { state: body.state } : {}),
       ...(body.pincode !== undefined ? { pincode: body.pincode } : {}),
     })
-    .where(eq(addresses.id, addressId))
-    .returning();
+    .where(eq(addresses.id, addressId));
 
   if (body.location) {
     await db.execute(
@@ -142,7 +174,16 @@ addressesRoute.patch("/addresses/:id", zValidator("json", updateAddressSchema), 
     );
   }
 
-  return c.json({ data: updated });
+  // Re-selected rather than built from the two updates' own `.returning()`s
+  // -- `location` only touches raw SQL, so it and the Drizzle-mapped fields
+  // never come back from the same statement (see file header).
+  const [updatedRow] = (await db.execute(sql`
+    SELECT id, user_id, label, line1, line2, city, state, pincode, is_default, created_at,
+           ST_AsGeoJSON(location)::json AS location
+    FROM addresses WHERE id = ${addressId}
+  `)) as unknown as AddressRow[];
+
+  return c.json({ data: mapAddressRow(updatedRow) });
 });
 
 // The one operation that actually has the concurrent-request race Baker

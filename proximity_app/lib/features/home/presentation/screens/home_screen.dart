@@ -133,15 +133,30 @@ class _RecommendedSection extends StatelessWidget {
           child: Text('Recommended for you', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
         ),
         SizedBox(
-          height: 380,
+          height: 480,
           child: GridView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
+            // Sprint 14 fix: childAspectRatio is cross-axis-extent ÷
+            // main-axis-extent -- for a *horizontally* scrolling grid the
+            // cross axis is height and the main axis is width, so the old
+            // `childAspectRatio: 0.72` here actually computed each card's
+            // WIDTH as height ÷ 0.72 (~257dp wide against a ~185dp-tall
+            // row) -- a card wider than tall, forced to hold a square image
+            // plus three text lines, which can never fit. That produced a
+            // real overflow, not a cosmetic one -- this section had never
+            // actually rendered on a real screen before this sprint.
+            // `mainAxisExtent` sets the main-axis (width) extent directly
+            // and unambiguously, sidestepping the aspect-ratio direction
+            // confusion entirely; 480 total height / 2 rows leaves ~225dp
+            // per row for a 150dp-wide card -- ~150dp square image + ~75dp
+            // for the text block below it, matching RecommendedProductCard's
+            // actual content height with a small margin.
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
               mainAxisSpacing: 10,
               crossAxisSpacing: 10,
-              childAspectRatio: 0.72,
+              mainAxisExtent: 150,
             ),
             itemCount: products.length,
             itemBuilder: (context, index) {
@@ -173,15 +188,18 @@ class _FrequentlyBoughtSection extends StatelessWidget {
           child: Text('Frequently Bought', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
         ),
         SizedBox(
-          height: 380,
+          height: 480,
           child: GridView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
+            // Same Sprint 14 fix as _RecommendedSection above -- identical
+            // card content shape (square image + 3 text lines), identical
+            // bug, identical fix.
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
               mainAxisSpacing: 10,
               crossAxisSpacing: 10,
-              childAspectRatio: 0.72,
+              mainAxisExtent: 150,
             ),
             itemCount: products.length,
             itemBuilder: (context, index) {
@@ -205,6 +223,10 @@ class _CenteredLoader extends StatelessWidget {
   }
 }
 
+/// Feedback fix: this used to be bare text with no visual anchor -- brought
+/// in line with `_LocationPrompt`'s own icon-plus-message shape just above
+/// it in this same file, rather than being the one empty state in this
+/// screen that looks unfinished next to it.
 class _EmptyShopsState extends StatelessWidget {
   const _EmptyShopsState();
 
@@ -212,12 +234,22 @@ class _EmptyShopsState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(32),
-      child: Center(
-        child: Text(
-          'No approved shops within their service area yet.',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.inkSoft),
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.storefront_outlined, size: 48, color: AppColors.inkSoft),
+          const SizedBox(height: 12),
+          Text(
+            'No shops here yet',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppColors.ink),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "We don't have any approved shops in your area yet -- check back soon.",
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.inkSoft),
+          ),
+        ],
       ),
     );
   }
@@ -254,7 +286,18 @@ class _LocationPrompt extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           OutlinedButton(
-            onPressed: () => context.push('/addresses/new'),
+            onPressed: () async {
+              // Sprint 14 fix: this button used to just push and forget --
+              // address_list_screen.dart's own "Add address" FAB already
+              // gets this right (await the result, invalidate on success),
+              // this was the one place that didn't match that established
+              // pattern. addressesProvider/buyerLocationProvider are cached
+              // FutureProviders, so without this, a newly-saved address
+              // never made Home's "no location" prompt go away until an
+              // unrelated pull-to-refresh happened to invalidate it too.
+              final added = await context.push<bool>('/addresses/new');
+              if (added == true) ref.invalidate(addressesProvider);
+            },
             child: const Text('Add an address'),
           ),
         ],

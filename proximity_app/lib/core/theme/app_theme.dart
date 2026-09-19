@@ -24,12 +24,54 @@ class AppColors {
   static const line = Color(0xFFE9E2D8);
 }
 
+/// SPRINT_PLANNING.md §6: "Plus Jakarta Sans, tabular-nums on all
+/// price/quantity text." Sprint 13's design-system audit found this had
+/// never actually been wired anywhere -- checked directly (grepped the
+/// whole mobile codebase for `FontFeature`/`tabularFigures`, zero matches)
+/// rather than assumed present because the theme file existed. The spec
+/// doesn't ask for tabular-nums on every price/quantity `Text` widget
+/// individually (this project has ~40 of them across ~19 files, per this
+/// sprint's own audit) -- it ties the feature to the body font itself, so
+/// applying it once here, to every field of the Plus Jakarta Sans
+/// [TextTheme] before the four Baloo 2 display/headline overrides layer on
+/// top, gets every current and future price/quantity `Text` widget for
+/// free: every one of them ultimately reads a `bodyX`/`titleX`/`labelX`
+/// style and `.copyWith`s onto it (fontWeight, color, ...), and `copyWith`
+/// only ever overrides the fields it's actually passed -- `fontFeatures`
+/// isn't one of the ~40 call sites' own `.copyWith` arguments anywhere in
+/// this codebase, so it survives untouched. `TextTheme.apply()` (Flutter's
+/// own built-in bulk-transform method) does NOT support `fontFeatures` --
+/// checked directly against the installed SDK source
+/// (`packages/flutter/lib/src/material/text_theme.dart`) before reaching
+/// for a manual per-field `copyWith` here instead of assuming `.apply()`
+/// could do it.
+TextTheme _withTabularNums(TextTheme theme) {
+  const tabularNums = [FontFeature.tabularFigures()];
+  return TextTheme(
+    displayLarge: theme.displayLarge?.copyWith(fontFeatures: tabularNums),
+    displayMedium: theme.displayMedium?.copyWith(fontFeatures: tabularNums),
+    displaySmall: theme.displaySmall?.copyWith(fontFeatures: tabularNums),
+    headlineLarge: theme.headlineLarge?.copyWith(fontFeatures: tabularNums),
+    headlineMedium: theme.headlineMedium?.copyWith(fontFeatures: tabularNums),
+    headlineSmall: theme.headlineSmall?.copyWith(fontFeatures: tabularNums),
+    titleLarge: theme.titleLarge?.copyWith(fontFeatures: tabularNums),
+    titleMedium: theme.titleMedium?.copyWith(fontFeatures: tabularNums),
+    titleSmall: theme.titleSmall?.copyWith(fontFeatures: tabularNums),
+    bodyLarge: theme.bodyLarge?.copyWith(fontFeatures: tabularNums),
+    bodyMedium: theme.bodyMedium?.copyWith(fontFeatures: tabularNums),
+    bodySmall: theme.bodySmall?.copyWith(fontFeatures: tabularNums),
+    labelLarge: theme.labelLarge?.copyWith(fontFeatures: tabularNums),
+    labelMedium: theme.labelMedium?.copyWith(fontFeatures: tabularNums),
+    labelSmall: theme.labelSmall?.copyWith(fontFeatures: tabularNums),
+  );
+}
+
 class AppTheme {
   AppTheme._();
 
   static ThemeData get light {
     final displayFont = GoogleFonts.baloo2TextTheme();
-    final bodyFont = GoogleFonts.plusJakartaSansTextTheme();
+    final bodyFont = _withTabularNums(GoogleFonts.plusJakartaSansTextTheme());
 
     final colorScheme = ColorScheme.fromSeed(
       seedColor: AppColors.brand,

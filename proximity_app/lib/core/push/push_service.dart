@@ -117,12 +117,26 @@ class PushService {
   /// call re-subscribing `onMessageOpenedApp` if something ever reads
   /// pushServiceProvider more than once) -- see push_providers.dart for
   /// where that single call happens.
+  ///
+  /// Sprint 13 fix: called from `pushServiceProvider`'s own constructor
+  /// (push_providers.dart), which `authProvider` watches -- so an unguarded
+  /// throw here (e.g. `FirebaseMessaging.instance` itself throws
+  /// `[core/no-app]` when `Firebase.initializeApp()` never succeeded, same
+  /// "no real Firebase config yet" case every other method in this file
+  /// already tolerates) poisons `authProvider`'s provider state and crashes
+  /// the entire auth-dependent UI at startup, not just this feature. Never
+  /// caught until this sprint's first real run against a device with blank
+  /// Firebase credentials.
   void wireNotificationTapHandling() {
     if (_tapHandlingWired) return;
     _tapHandlingWired = true;
 
-    FirebaseMessaging.instance.getInitialMessage().then(_handleTap);
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleTap);
+    try {
+      FirebaseMessaging.instance.getInitialMessage().then(_handleTap);
+      FirebaseMessaging.onMessageOpenedApp.listen(_handleTap);
+    } catch (err) {
+      debugPrint('PushService.wireNotificationTapHandling skipped: $err');
+    }
   }
 
   void _handleTap(RemoteMessage? message) {

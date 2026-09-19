@@ -24,12 +24,20 @@ authRoute.post("/auth/me", authMiddleware, async (c) => {
     return c.json({ data: { user: existing[0], role: existing[0].role } });
   }
 
+  // Sprint 14: sign-up's optional full name/phone fields (sign_up_screen.dart)
+  // travel as `signUp()`'s `data` map, landing in `user_metadata` -- distinct
+  // from `authUser.phone`, which is GoTrue's own phone-auth field (always
+  // null here, this project never uses phone-based auth). Only read on
+  // first creation, same as every other field here -- an existing row's
+  // profile fields are the user's own to edit later, not re-derived from
+  // signup metadata on every session sync.
   const [created] = await db
     .insert(users)
     .values({
       id: authUser.id,
       email: authUser.email ?? null,
-      phone: authUser.phone ?? null,
+      phone: (authUser.user_metadata?.phone as string | undefined) ?? authUser.phone ?? null,
+      fullName: (authUser.user_metadata?.full_name as string | undefined) ?? null,
       // role defaults to 'buyer' at the DB level (migrations/001) -- not
       // repeated here so there's exactly one place that decides the default.
     })

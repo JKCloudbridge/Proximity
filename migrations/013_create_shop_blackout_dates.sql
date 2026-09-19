@@ -18,11 +18,13 @@ CREATE INDEX IF NOT EXISTS idx_shop_blackout_dates_shop_id ON shop_blackout_date
 
 ALTER TABLE shop_blackout_dates ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS shop_blackout_dates_select_public ON shop_blackout_dates;
 CREATE POLICY shop_blackout_dates_select_public ON shop_blackout_dates
   FOR SELECT USING (
     shop_id IN (SELECT id FROM shops WHERE status = 'approved')
   );
 
+DROP POLICY IF EXISTS shop_blackout_dates_select_team ON shop_blackout_dates;
 CREATE POLICY shop_blackout_dates_select_team ON shop_blackout_dates
   FOR SELECT USING (
     shop_id IN (SELECT shop_id FROM shop_team_members WHERE user_id = auth.uid())
@@ -30,6 +32,7 @@ CREATE POLICY shop_blackout_dates_select_team ON shop_blackout_dates
 
 -- Owner-only write, same rationale as shop_business_hours (008) -- both are
 -- "when are we open" settings, §5.3's owner-only row.
+DROP POLICY IF EXISTS shop_blackout_dates_owner_write ON shop_blackout_dates;
 CREATE POLICY shop_blackout_dates_owner_write ON shop_blackout_dates
   FOR ALL USING (
     shop_id IN (SELECT shop_id FROM shop_team_members WHERE user_id = auth.uid() AND member_role = 'owner')
@@ -38,6 +41,7 @@ CREATE POLICY shop_blackout_dates_owner_write ON shop_blackout_dates
     shop_id IN (SELECT shop_id FROM shop_team_members WHERE user_id = auth.uid() AND member_role = 'owner')
   );
 
+DROP POLICY IF EXISTS shop_blackout_dates_admin_all ON shop_blackout_dates;
 CREATE POLICY shop_blackout_dates_admin_all ON shop_blackout_dates
   FOR ALL USING (public.get_role() = 'admin')
   WITH CHECK (public.get_role() = 'admin');

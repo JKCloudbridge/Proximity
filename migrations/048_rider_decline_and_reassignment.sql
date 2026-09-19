@@ -100,6 +100,7 @@ ALTER TABLE order_rider_declines ENABLE ROW LEVEL SECURITY;
 -- sprint's scope names a UI surface for it beyond the rider's own app, and
 -- RLS here is a backstop only anyway (§5.1) since the Edge Function never
 -- queries this table through PostgREST.
+DROP POLICY IF EXISTS order_rider_declines_select_own_rider ON order_rider_declines;
 CREATE POLICY order_rider_declines_select_own_rider ON order_rider_declines
   FOR SELECT USING (
     rider_id = (SELECT id FROM riders WHERE user_id = auth.uid())
@@ -119,18 +120,35 @@ CREATE POLICY order_rider_declines_select_own_rider ON order_rider_declines
 
 DROP FUNCTION IF EXISTS public.rpc_assign_rider(UUID);
 
-CREATE FUNCTION public.rpc_assign_rider(
+-- OR REPLACE, not a bare CREATE, so *this* file is itself safe to re-run
+-- once the two-argument signature above already exists (the DROP above only
+-- ever needs to fire once, to clear the old one-argument overload from
+-- migrations/039 -- on any later re-run it's a harmless no-op, and without
+-- OR REPLACE here the CREATE FUNCTION below would then fail with "function
+-- already exists" the same way this project's CREATE POLICY statements did
+-- before every one of them got a DROP POLICY IF EXISTS guard).
+CREATE OR REPLACE FUNCTION public.rpc_assign_rider(
   p_order_id           UUID,
   p_exclude_rider_ids  UUID[] DEFAULT NULL
 )
 RETURNS TABLE(order_id UUID, rider_id UUID, rider_full_name TEXT, rider_phone TEXT)
 LANGUAGE plpgsql
 SECURITY DEFINER
+-- Carried over from migrations/039, including the same real bug that
+-- file's own header now documents the full two-attempt story of (caught by
+-- actually running this against a live database; the first fix attempted
+-- -- widening search_path rather than schema-qualifying -- was ALSO
+-- verified against the live database and still failed). Fixed here too,
+-- not just upstream, the same confirmed way: every PostGIS type/operator
+-- below explicitly qualified to `public` (confirmed via `pg_extension` on
+-- the live database, not guessed), search_path back to `''` -- this
+-- DROP+CREATE would otherwise reintroduce the exact bug migrations/039
+-- fixed, the moment it runs.
 SET search_path = ''
 AS $$
 DECLARE
   v_order      public.orders%ROWTYPE;
-  v_shop_point GEOGRAPHY;
+  v_shop_point public.geography;
   v_rider      public.riders%ROWTYPE;
 BEGIN
   SELECT * INTO v_order FROM public.orders WHERE id = p_order_id FOR UPDATE;
@@ -167,7 +185,7 @@ BEGIN
   FROM public.riders
   WHERE status = 'available' AND is_verified = true AND current_location IS NOT NULL
     AND (p_exclude_rider_ids IS NULL OR id <> ALL(p_exclude_rider_ids))
-  ORDER BY current_location <-> v_shop_point
+  ORDER BY current_location OPERATOR(public.<->) v_shop_point
   LIMIT 1
   FOR UPDATE SKIP LOCKED;
 

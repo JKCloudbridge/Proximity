@@ -9,6 +9,12 @@
 -- alone, same as Baker Ally's note): Supabase Dashboard -> Authentication ->
 -- Hooks -> "Customize Access Token (JWT) Claims" -> select
 -- public.custom_access_token_hook.
+--
+-- APPLY THIS BEFORE 003 on a fresh project -- 003_create_categories.sql's
+-- admin-write policy calls get_role() (defined below), which doesn't exist
+-- until this file runs. See 003's own header comment for the full story;
+-- not fixed by renumbering given how many later migrations already
+-- reference these two files by their current numbers.
 
 CREATE OR REPLACE FUNCTION public.custom_access_token_hook(event jsonb)
 RETURNS jsonb
@@ -37,6 +43,25 @@ $$;
 GRANT USAGE ON SCHEMA public TO supabase_auth_admin;
 GRANT EXECUTE ON FUNCTION public.custom_access_token_hook TO supabase_auth_admin;
 REVOKE EXECUTE ON FUNCTION public.custom_access_token_hook FROM authenticated, anon, public;
+
+-- Sprint 14 fix: the function above is SECURITY INVOKER (not DEFINER), so
+-- its SELECT runs as whatever role actually calls it -- supabase_auth_admin,
+-- per the GRANT EXECUTE above -- not as the function's owner. `users` has
+-- RLS enabled (migrations/001) with only an `id = auth.uid()` policy, which
+-- never matches in this context (there's no "current JWT" yet -- the token
+-- is what's being built), and supabase_auth_admin had no table-level SELECT
+-- grant either. Both gaps together made every real call to this hook fail
+-- outright with "Error running hook" once it was actually enabled in the
+-- dashboard -- never caught before because the hook had never been invoked
+-- for real until this sprint. Matches Supabase's own documented Custom
+-- Access Token Hook pattern, which always pairs GRANT EXECUTE with exactly
+-- these two grants -- this migration had only ever included the first.
+GRANT SELECT ON public.users TO supabase_auth_admin;
+
+DROP POLICY IF EXISTS users_select_auth_admin ON public.users;
+CREATE POLICY users_select_auth_admin ON public.users
+  FOR SELECT TO supabase_auth_admin
+  USING (true);
 
 -- Read-side helper so every RLS policy that needs "is this caller an admin"
 -- (categories, platform_settings, shop/rider approval, discounts -- see

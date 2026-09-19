@@ -71,7 +71,7 @@ class RecurringListDetailScreen extends ConsumerWidget {
         title: listAsync.maybeWhen(data: (list) => Text(list.name), orElse: () => const Text('Recurring list')),
         actions: [
           listAsync.maybeWhen(
-            data: (list) => IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => _delete(context, ref, list)),
+            data: (list) => IconButton(tooltip: 'Delete list', icon: const Icon(Icons.delete_outline), onPressed: () => _delete(context, ref, list)),
             orElse: () => const SizedBox.shrink(),
           ),
         ],

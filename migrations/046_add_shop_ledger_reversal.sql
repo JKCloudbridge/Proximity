@@ -65,6 +65,9 @@ ALTER TABLE shop_ledger_entries
   ADD COLUMN IF NOT EXISTS reverses_entry_id UUID REFERENCES shop_ledger_entries(id);
 
 ALTER TABLE shop_ledger_entries
+  DROP CONSTRAINT IF EXISTS shop_ledger_entries_reversal_shape_check;
+
+ALTER TABLE shop_ledger_entries
   ADD CONSTRAINT shop_ledger_entries_reversal_shape_check
   CHECK (
     (entry_type IN ('payout_reversal', 'commission_reversal') AND reverses_entry_id IS NOT NULL) OR

@@ -57,6 +57,7 @@ class _ShopCartSectionState extends ConsumerState<ShopCartSection> {
                   ),
                   Text(formatPaise(subtotal), style: const TextStyle(fontWeight: FontWeight.w700)),
                   IconButton(
+                    tooltip: _expanded ? 'Collapse' : 'Expand',
                     icon: Icon(_expanded ? Icons.expand_less : Icons.expand_more, color: AppColors.inkSoft),
                     onPressed: () => setState(() => _expanded = !_expanded),
                     visualDensity: VisualDensity.compact,

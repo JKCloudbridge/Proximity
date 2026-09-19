@@ -31,9 +31,11 @@ CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 
 -- Own-row read/update -- SPRINT_PLANNING.md §5.2 "own-user data" pattern.
+DROP POLICY IF EXISTS users_select_own ON users;
 CREATE POLICY users_select_own ON users
   FOR SELECT USING (id = auth.uid());
 
+DROP POLICY IF EXISTS users_update_own ON users;
 CREATE POLICY users_update_own ON users
   FOR UPDATE USING (id = auth.uid())
   WITH CHECK (id = auth.uid() AND role = (SELECT role FROM users WHERE id = auth.uid()));

@@ -68,11 +68,13 @@ ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 -- shop_sub_categories_select_public (010). Backstop only (§5.1); the actual
 -- buyer-facing route in routes/catalog.ts filters on both conditions itself
 -- too.
+DROP POLICY IF EXISTS products_select_public ON products;
 CREATE POLICY products_select_public ON products
   FOR SELECT USING (
     is_active = true AND shop_id IN (SELECT id FROM shops WHERE status = 'approved')
   );
 
+DROP POLICY IF EXISTS products_select_team ON products;
 CREATE POLICY products_select_team ON products
   FOR SELECT USING (
     shop_id IN (SELECT shop_id FROM shop_team_members WHERE user_id = auth.uid())
@@ -80,6 +82,7 @@ CREATE POLICY products_select_team ON products
 
 -- Owner + staff manage the catalog (§5.3's "Add/edit catalog" row) --
 -- delivery-role members get no write access here at all.
+DROP POLICY IF EXISTS products_team_write ON products;
 CREATE POLICY products_team_write ON products
   FOR ALL USING (
     shop_id IN (SELECT shop_id FROM shop_team_members WHERE user_id = auth.uid() AND member_role IN ('owner', 'staff'))
@@ -88,6 +91,7 @@ CREATE POLICY products_team_write ON products
     shop_id IN (SELECT shop_id FROM shop_team_members WHERE user_id = auth.uid() AND member_role IN ('owner', 'staff'))
   );
 
+DROP POLICY IF EXISTS products_admin_all ON products;
 CREATE POLICY products_admin_all ON products
   FOR ALL USING (public.get_role() = 'admin')
   WITH CHECK (public.get_role() = 'admin');

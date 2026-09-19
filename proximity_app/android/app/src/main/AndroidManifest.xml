@@ -1,13 +1,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Sprint 11: Android 13+ (API 33+) requires this as a runtime-granted
          permission before any notification (including FCM's) can actually
-         show -- FirebaseMessaging.instance.requestPermission()
+         show. FirebaseMessaging.instance.requestPermission()
          (push_service.dart) is what triggers the system prompt, but only if
          this is declared here first. firebase_messaging's own AAR manifest
          merges in its FirebaseMessagingService/receivers automatically
          (no google-services.json needed for that, see pubspec.yaml's own
-         comment) -- this one permission line is the only manifest change
-         this sprint needs. -->
+         comment). This one permission line is the only manifest change
+         this sprint needs.
+
+         Sprint 13 fix: this comment used a doubled hyphen twice as a
+         stylistic em dash substitute, the same convention used throughout
+         this codebase's Dart/TS comments (harmless there). That sequence is
+         never permitted inside an XML comment body, and this was a real,
+         latent syntax error, never caught until this sprint's first actual
+         Gradle build against a real device: ManifestMerger2 rejects it
+         outright (org.xml.sax.SAXParseException, doubled hyphen not
+         permitted within comments). Reworded rather than escaped, since an
+         XML comment body cannot escape that sequence at all. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="proximity_app"

@@ -24,6 +24,7 @@ ALTER TABLE cart_items ENABLE ROW LEVEL SECURITY;
 -- cart_items has no user_id column of its own (by design, per the literal
 -- DDL above) -- own-user data is scoped one hop through carts, same shape
 -- §5.2 already describes for other join-scoped ownership checks.
+DROP POLICY IF EXISTS cart_items_all_own ON cart_items;
 CREATE POLICY cart_items_all_own ON cart_items
   FOR ALL USING (cart_id IN (SELECT id FROM carts WHERE user_id = auth.uid()))
   WITH CHECK (cart_id IN (SELECT id FROM carts WHERE user_id = auth.uid()));

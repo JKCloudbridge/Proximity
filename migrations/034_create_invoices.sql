@@ -69,10 +69,12 @@ ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
 -- via orders.user_id, shop team via shop_id, admin via get_role()) is the
 -- live enforcement, same split every other RPC-written table in this project
 -- already uses.
+DROP POLICY IF EXISTS invoices_select_buyer ON invoices;
 CREATE POLICY invoices_select_buyer ON invoices
   FOR SELECT USING (order_id IN (SELECT id FROM orders WHERE user_id = auth.uid()));
 
 -- §5.3's "View sales summary / invoices" row: owner + staff, never delivery.
+DROP POLICY IF EXISTS invoices_select_shop_team ON invoices;
 CREATE POLICY invoices_select_shop_team ON invoices
   FOR SELECT USING (
     shop_id IN (
@@ -81,6 +83,7 @@ CREATE POLICY invoices_select_shop_team ON invoices
     )
   );
 
+DROP POLICY IF EXISTS invoices_admin_all ON invoices;
 CREATE POLICY invoices_admin_all ON invoices
   FOR ALL USING (public.get_role() = 'admin')
   WITH CHECK (public.get_role() = 'admin');

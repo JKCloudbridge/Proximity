@@ -46,9 +46,11 @@ ALTER TABLE shops ENABLE ROW LEVEL SECURITY;
 -- this policy. This is a backstop, not the live enforcement (§5.1) -- the
 -- Edge Function's buyer-facing shop routes filter on status themselves too
 -- once they exist.
+DROP POLICY IF EXISTS shops_select_public ON shops;
 CREATE POLICY shops_select_public ON shops
   FOR SELECT USING (status = 'approved');
 
+DROP POLICY IF EXISTS shops_admin_all ON shops;
 CREATE POLICY shops_admin_all ON shops
   FOR ALL USING (public.get_role() = 'admin')
   WITH CHECK (public.get_role() = 'admin');

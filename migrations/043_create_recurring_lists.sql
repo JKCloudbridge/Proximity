@@ -79,6 +79,7 @@ CREATE INDEX IF NOT EXISTS idx_recurring_lists_user_id ON recurring_lists(user_i
 
 ALTER TABLE recurring_lists ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS recurring_lists_all_own ON recurring_lists;
 CREATE POLICY recurring_lists_all_own ON recurring_lists
   FOR ALL USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
@@ -106,6 +107,7 @@ ALTER TABLE recurring_list_items ENABLE ROW LEVEL SECURITY;
 -- recurring_list_items has no user_id column of its own (by design, same
 -- shape cart_items already established in Sprint 6) -- own-user data is
 -- scoped one hop through recurring_lists.
+DROP POLICY IF EXISTS recurring_list_items_all_own ON recurring_list_items;
 CREATE POLICY recurring_list_items_all_own ON recurring_list_items
   FOR ALL USING (recurring_list_id IN (SELECT id FROM recurring_lists WHERE user_id = auth.uid()))
   WITH CHECK (recurring_list_id IN (SELECT id FROM recurring_lists WHERE user_id = auth.uid()));

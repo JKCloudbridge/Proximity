@@ -69,7 +69,7 @@ class _ShopHeader extends StatelessWidget {
         Positioned(
           top: MediaQuery.of(context).padding.top + 4,
           left: 4,
-          child: CircleAvatar(backgroundColor: Colors.white, child: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => context.pop())),
+          child: CircleAvatar(backgroundColor: Colors.white, child: IconButton(tooltip: 'Back', icon: const Icon(Icons.arrow_back), onPressed: () => context.pop())),
         ),
         Positioned(
           left: 0,
